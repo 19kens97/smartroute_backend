@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "apps.vehicles",
     "apps.documents",
     "apps.drivers",
+    "apps.insurance",
     "apps.scans",
     "apps.infractions",
     "apps.tickets",
@@ -71,9 +72,17 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+PRIVATE_SIGNATURE_ROOT = BASE_DIR / "private" / "agent-signatures"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = [o.strip() for o in config("CORS_ALLOWED_ORIGINS", default="").split(",") if o.strip()]
 CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", cast=bool, default=False)
+
+GEMINI_API_KEY = config("GEMINI_API_KEY", default="")
+GEMINI_MODEL = config("GEMINI_MODEL", default="gemini-2.5-flash")
+GEMINI_FALLBACK_MODELS = [m.strip() for m in config("GEMINI_FALLBACK_MODELS", default="").split(",") if m.strip()]
+GEMINI_LOG_RESPONSE = config("GEMINI_LOG_RESPONSE", cast=bool, default=False)
+GEMINI_LOG_RAW_RESPONSE = config("GEMINI_LOG_RAW_RESPONSE", cast=bool, default=False)
+ENABLE_RECOGNIZE_ENDPOINT = config("ENABLE_RECOGNIZE_ENDPOINT", cast=bool, default=False)
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",

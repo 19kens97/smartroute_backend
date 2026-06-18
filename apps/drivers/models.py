@@ -5,7 +5,7 @@ class Driver(TimeStampedModel):
     SEX_CHOICES = [("M", "Masculin"), ("F", "Feminin")]
 
     dossier_number = models.CharField(max_length=50, unique=True)
-    nif = models.CharField(max_length=40, blank=True)
+    nif = models.CharField(max_length=40, blank=True, db_index=True)
     full_name = models.CharField(max_length=150)
     address = models.CharField(max_length=255, blank=True)
     birth_date = models.DateField(null=True, blank=True)

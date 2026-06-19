@@ -4,6 +4,9 @@ from datetime import timedelta
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
+from apps.alerts.models import Alert
+from apps.tickets.models import Ticket
+
 from .models import Driver
 
 
@@ -252,14 +255,111 @@ class DriverApiTests(APITestCase):
         self.assertNotIn("password", payload)
         self.assertNotIn("token", payload)
 
-    def test_dossier_search_uses_one_query(self):
+    def test_dossier_search_uses_two_queries_without_n_plus_one(self):
         self.force_auth(self.terrain)
 
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(2):
             response = self.client.get("/api/drivers/search-by-dossier/", {"dossier_number": "DOS-001"})
 
         self.assertEqual(response.status_code, 200)
 
+    def create_ticket(self, driver=None, status="VALIDATED", created_days_ago=0):
+        driver = driver or self.driver
+        ticket = Ticket.objects.create(
+            agent=self.terrain,
+            driver_license=driver.dossier_number,
+            plate_number_snapshot="HT-DRIVER",
+            status=status,
+        )
+        if created_days_ago:
+            Ticket.objects.filter(pk=ticket.pk).update(
+                created_at=timezone.now() - timedelta(days=created_days_ago)
+            )
+            ticket.refresh_from_db()
+        return ticket
+
+    def test_search_response_contains_empty_unpaid_ticket_summary(self):
+        self.force_auth(self.terrain)
+        response = self.client.get("/api/drivers/search-by-dossier/", {"dossier_number": "DOS-001"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["data"]["unpaid_tickets"],
+            {"count": 0, "has_unpaid_tickets": False, "alert": None, "items": []},
+        )
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+
+    def test_one_valid_unpaid_ticket_returns_warning_without_judicial_alert(self):
+        ticket = self.create_ticket(status="VALIDATED")
+        self.force_auth(self.terrain)
+
+        response = self.client.get("/api/drivers/search-by-dossier/", {"dossier_number": "DOS-001"})
+
+        summary = response.data["data"]["unpaid_tickets"]
+        self.assertEqual(summary["count"], 1)
+        self.assertTrue(summary["has_unpaid_tickets"])
+        self.assertEqual(summary["alert"]["code"], "UNPAID_TICKETS")
+        self.assertEqual(summary["items"][0]["id"], ticket.id)
+        self.assertEqual(summary["items"][0]["payment_status"], "UNPAID")
+        self.assertIsNone(response.data["data"]["judicial_alert"])
+        self.assertFalse(Alert.objects.filter(alert_type=Alert.TYPE_JUDICIAL).exists())
+
+    def test_two_valid_unpaid_tickets_create_one_idempotent_judicial_alert(self):
+        self.create_ticket(status="ISSUED")
+        self.create_ticket(status="VALIDATED")
+        self.force_auth(self.terrain)
+
+        first = self.client.get("/api/drivers/search-by-nif/", {"nif": "001-234-567-8"})
+        second = self.client.get("/api/drivers/search-by-nif/", {"nif": "0012345678"})
+
+        self.assertEqual(first.data["data"]["unpaid_tickets"]["count"], 2)
+        self.assertEqual(first.data["data"]["judicial_alert"]["code"], "JUDICIAL_ALERT")
+        self.assertEqual(second.status_code, 200)
+        judicial = Alert.objects.filter(
+            alert_type=Alert.TYPE_JUDICIAL,
+            subject_nif="0012345678",
+        )
+        self.assertEqual(judicial.count(), 1)
+        self.assertIn("MULTIPLE_VALID_UNPAID_TICKETS", judicial.get().system_reasons)
+
+    def test_paid_cancelled_and_non_validated_tickets_are_excluded(self):
+        for status in ("PAID", "CANCELLED", "DRAFT", "PENDING_SYNC"):
+            self.create_ticket(status=status)
+        self.force_auth(self.terrain)
+
+        response = self.client.get("/api/drivers/search-by-dossier/", {"dossier_number": "DOS-001"})
+
+        self.assertEqual(response.data["data"]["unpaid_tickets"]["count"], 0)
+
+    def test_ticket_for_another_driver_is_excluded(self):
+        other = self.create_driver("OTHER-001", nif="9988776655")
+        self.create_ticket(driver=other)
+        self.force_auth(self.terrain)
+
+        response = self.client.get("/api/drivers/search-by-dossier/", {"dossier_number": "DOS-001"})
+
+        self.assertEqual(response.data["data"]["unpaid_tickets"]["count"], 0)
+
+    def test_ticket_outside_control_period_is_excluded(self):
+        self.create_ticket(created_days_ago=1)
+        self.force_auth(self.terrain)
+
+        response = self.client.get("/api/drivers/search-by-dossier/", {"dossier_number": "DOS-001"})
+
+        self.assertEqual(response.data["data"]["unpaid_tickets"]["count"], 0)
+
+    def test_nif_search_combines_tickets_from_all_matching_dossiers(self):
+        second_driver = self.create_driver("DOS-SECOND", nif="001-234-567-8")
+        self.create_ticket(driver=self.driver)
+        self.create_ticket(driver=second_driver)
+        self.force_auth(self.terrain)
+
+        response = self.client.get("/api/drivers/search-by-nif/", {"nif": "001 234 567 8"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["unpaid_tickets"]["count"], 2)
+        returned_ids = {item["id"] for item in response.data["data"]["unpaid_tickets"]["items"]}
+        self.assertEqual(returned_ids, set(Ticket.objects.values_list("id", flat=True)))
     def test_entry_agent_can_create_driver(self):
         self.auth("saisie_driver")
         response = self.client.post(

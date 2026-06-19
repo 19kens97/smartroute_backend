@@ -93,7 +93,26 @@ class DriverViewSet(ModelViewSet):
         )
 
     def _license_response(self, drivers):
+        drivers = list(drivers)
         message, data = build_license_search_result(drivers, DriverLicenseReadSerializer)
+        data["judicial_alert"] = None
+        if drivers and drivers[0].nif and (
+            data["active_count"] >= 2
+            or data["has_conflict"]
+            or data["unpaid_tickets"]["count"] >= 2
+        ):
+            from apps.alerts.services import evaluate_judicial_alert
+            judicial_alert, _ = evaluate_judicial_alert(
+                nif=drivers[0].nif,
+                actor=self.request.user,
+                unpaid_ticket_count=data["unpaid_tickets"]["count"],
+            )
+            if judicial_alert is not None:
+                data["judicial_alert"] = {
+                    "code": "JUDICIAL_ALERT",
+                    "level": "CRITICAL",
+                    "message": judicial_alert.description,
+                }
         response = api_response(True, message, data)
         response["Cache-Control"] = "private, no-store"
         return response
@@ -154,7 +173,7 @@ class DriverViewSet(ModelViewSet):
             )
         ],
         responses={
-            200: OpenApiResponse(description="Permis trouvé. Inclut count, has_conflict, alert et licenses."),
+            200: OpenApiResponse(description="Permis trouvé. Inclut les permis, conflits et la section unpaid_tickets."),
             400: OpenApiResponse(description="Paramètre dossier_number absent ou vide."),
             401: OpenApiResponse(description="Authentification JWT requise."),
             404: OpenApiResponse(description="Aucun permis trouvé."),
@@ -171,7 +190,8 @@ class DriverViewSet(ModelViewSet):
                         "has_conflict": False,
                         "alert": None,
                         "overlapping_license_ids": [],
-                        "licenses": [{"dossier_number": "DRV-000124", "is_currently_valid": True, "validity_state": "ACTIVE"}],
+                        "licenses": [{"dossier_number": "DRV-000124", "is_currently_valid": True, "validity_state": "VALID"}],
+                        "unpaid_tickets": {"count": 0, "has_unpaid_tickets": False, "alert": None, "items": []},
                     },
                     "errors": {},
                 },

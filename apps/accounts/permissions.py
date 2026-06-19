@@ -8,7 +8,7 @@ class HasRole(BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and request.user.role in self.roles
+            and getattr(request.user, "role", None) in self.roles
         )
 
 

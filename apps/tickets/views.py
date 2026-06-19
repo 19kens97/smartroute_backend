@@ -19,12 +19,18 @@ class TicketViewSet(ModelViewSet):
         generate_ticket_barcode(ticket)
         ticket.save()
         log_action(self.request.user, ticket, "CREATE")
+        if ticket.vehicle_id:
+            from apps.alerts.services import evaluate_judicial_alert
+            evaluate_judicial_alert(vehicle=ticket.vehicle, actor=self.request.user)
 
     def perform_update(self, serializer):
         before = self.get_object().status
         ticket = serializer.save()
         action = "STATUS_CHANGE" if before != ticket.status else "UPDATE"
         log_action(self.request.user, ticket, action, {"from": before, "to": ticket.status})
+        if ticket.vehicle_id:
+            from apps.alerts.services import evaluate_judicial_alert
+            evaluate_judicial_alert(vehicle=ticket.vehicle, actor=self.request.user)
 
     @action(detail=True, methods=["post"], url_path="proofs")
     def add_proof(self, request, pk=None):

@@ -18,6 +18,16 @@ from .serializers import ScanSerializer
 logger = logging.getLogger(__name__)
 
 
+def evaluate_vehicle_alert(vehicle, actor):
+    if vehicle is None:
+        return
+    try:
+        from apps.alerts.services import evaluate_judicial_alert
+        evaluate_judicial_alert(vehicle=vehicle, actor=actor)
+    except Exception:
+        logger.exception("Impossible d'évaluer l'alerte judiciaire du véhicule.")
+
+
 def is_temporary_gemini_unavailable(error: Exception) -> bool:
     status_code = getattr(error, "status_code", None)
     if status_code == 503:
@@ -82,7 +92,7 @@ def serialize_vehicle(vehicle):
         "brand": vehicle.brand,
         "model": vehicle.model,
         "color": vehicle.color,
-        "year": None,
+        "year": vehicle.year,
         "owner": serialize_owner(owner),
     }
 
@@ -125,7 +135,7 @@ def build_documents_style_payload(vehicle):
             "marque": vehicle.brand,
             "modele": vehicle.model,
             "couleur": vehicle.color,
-            "annee": None,
+            "annee": vehicle.year,
         },
         "proprietaire": {
             "nif": getattr(owner, "national_id", None),
@@ -270,6 +280,7 @@ def extract_license_plate(request):
             _response, model_used, plate_number, raw_text = generate_with_fallbacks(contents)
             plate_number_display = format_plate_display(plate_number) if plate_number else ""
             vehicle = get_vehicle_by_plate(plate_number_display) if plate_number_display else None
+            evaluate_vehicle_alert(vehicle, request.user)
             scan_entry = None
             try:
                 scan_entry = GeminiScan.objects.create(
@@ -395,6 +406,7 @@ def search_plate(request):
         )
 
     vehicle = get_vehicle_by_plate(plate_number_display)
+    evaluate_vehicle_alert(vehicle, request.user)
 
     try:
         Scan.objects.create(agent=request.user, plate_number=plate_number_display, source="MANUAL")

@@ -4,6 +4,8 @@ from django.db.models import F, Value
 from django.db.models.functions import Replace, Upper
 from django.utils import timezone
 
+from apps.tickets.services import build_unpaid_ticket_summary, get_unpaid_valid_tickets_for_drivers
+
 
 VALIDITY_VALID = "VALID"
 VALIDITY_EXPIRED = "EXPIRED"
@@ -28,7 +30,7 @@ def normalized_nif_expression(field_name="nif"):
                 Value(" "),
                 Value(""),
             ),
-            Value("\t"),
+            Value("	"),
             Value(""),
         )
     )
@@ -46,10 +48,6 @@ def get_license_validity_state(driver, today=None):
 
 
 def periods_overlap(start_a, end_a, start_b, end_b):
-    """
-    Return False when a boundary is missing: an incomplete period is unknown,
-    so it is not treated as an administratively proven overlap.
-    """
     if not all((start_a, end_a, start_b, end_b)):
         return False
     return start_a <= end_b and start_b <= end_a
@@ -63,7 +61,7 @@ def get_overlapping_license_ids(drivers):
     return sorted(overlapping_ids)
 
 
-def build_license_search_result(drivers, serializer_class):
+def build_license_search_result(drivers, serializer_class, period_start=None, period_end=None):
     drivers = list(drivers)
     today = timezone.localdate()
     active_drivers = [
@@ -75,17 +73,23 @@ def build_license_search_result(drivers, serializer_class):
     has_business_alert = has_conflict or len(active_overlapping_ids) >= 2
 
     alert = None
-    message = "Permis trouve." if len(drivers) == 1 else "Permis trouves."
+    message = "Permis trouvé." if len(drivers) == 1 else "Permis trouvés."
     if has_business_alert:
-        message = "Plusieurs permis actifs ou superposes ont ete detectes."
+        message = "Plusieurs permis actifs ou superposés ont été détectés."
         alert = {
             "code": "MULTIPLE_ACTIVE_LICENSES",
             "level": "WARNING",
             "message": (
-                "Plusieurs permis utilisables simultanement sont associes a ce NIF. "
-                "Une verification administrative est requise."
+                "Plusieurs permis utilisables simultanément sont associés à ce NIF. "
+                "Une vérification administrative est requise."
             ),
         }
+
+    unpaid_tickets = get_unpaid_valid_tickets_for_drivers(
+        drivers=drivers,
+        period_start=period_start,
+        period_end=period_end,
+    )
 
     return message, {
         "count": len(drivers),
@@ -94,4 +98,5 @@ def build_license_search_result(drivers, serializer_class):
         "alert": alert,
         "overlapping_license_ids": overlapping_license_ids,
         "licenses": serializer_class(drivers, many=True).data,
+        "unpaid_tickets": build_unpaid_ticket_summary(unpaid_tickets),
     }

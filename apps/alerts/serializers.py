@@ -1,4 +1,4 @@
-from rest_framework import serializers
+﻿from rest_framework import serializers
 
 from apps.vehicles.models import normalize_plate_number
 from .models import Alert
@@ -23,45 +23,36 @@ ALERT_TYPE_LABELS = {
     Alert.TYPE_STOLEN_PLATE: "Plaque volée",
     Alert.TYPE_JUDICIAL: "Alerte judiciaire",
 }
+ALERT_SEVERITIES = {
+    Alert.TYPE_FIELD_ESCAPE: "CRITICAL",
+    Alert.TYPE_REFUSED_CONTROL: "CRITICAL",
+    Alert.TYPE_SUSPICIOUS_BEHAVIOR: "WARNING",
+    Alert.TYPE_WANTED_VEHICLE: "CRITICAL",
+    Alert.TYPE_STOLEN_PLATE: "CRITICAL",
+    Alert.TYPE_JUDICIAL: "CRITICAL",
+}
 
 
 class AlertSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     created_by_role = serializers.CharField(source="created_by.role", read_only=True, allow_null=True)
     alert_type_display = serializers.SerializerMethodField()
+    severity = serializers.SerializerMethodField()
+    is_opened = serializers.SerializerMethodField()
 
     class Meta:
         model = Alert
         fields = (
-            "id",
-            "alert_type",
-            "alert_type_display",
-            "plate_number",
-            "description",
-            "created_by",
-            "created_by_name",
-            "created_by_role",
-            "source",
-            "subject_nif",
-            "system_reasons",
-            "control_period_start",
-            "control_period_end",
-            "created_at",
-            "updated_at",
+            "id", "alert_type", "alert_type_display", "severity", "plate_number",
+            "description", "created_by", "created_by_name", "created_by_role",
+            "source", "subject_nif", "system_reasons", "control_period_start",
+            "control_period_end", "is_opened", "created_at", "updated_at",
         )
         read_only_fields = (
-            "id",
-            "created_by",
-            "created_by_name",
-            "created_by_role",
-            "alert_type_display",
-            "source",
-            "subject_nif",
-            "system_reasons",
-            "control_period_start",
-            "control_period_end",
-            "created_at",
-            "updated_at",
+            "id", "created_by", "created_by_name", "created_by_role",
+            "alert_type_display", "severity", "source", "subject_nif",
+            "system_reasons", "control_period_start", "control_period_end",
+            "is_opened", "created_at", "updated_at",
         )
 
     def get_fields(self):
@@ -77,6 +68,12 @@ class AlertSerializer(serializers.ModelSerializer):
 
     def get_alert_type_display(self, obj):
         return ALERT_TYPE_LABELS.get(obj.alert_type, obj.alert_type)
+
+    def get_severity(self, obj):
+        return ALERT_SEVERITIES.get(obj.alert_type, "INFO")
+
+    def get_is_opened(self, obj):
+        return bool(getattr(obj, "is_opened_for_user", False))
 
     def validate(self, attrs):
         request = self.context.get("request")

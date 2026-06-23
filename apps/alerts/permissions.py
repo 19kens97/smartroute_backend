@@ -2,7 +2,7 @@ from rest_framework.permissions import BasePermission
 
 
 class AlertPermission(BasePermission):
-    READ_ACTIONS = {"list", "retrieve"}
+    READ_ACTIONS = {"list", "retrieve", "recent_unread", "mark_opened"}
     WRITE_ACTIONS = {"update", "partial_update"}
 
     def has_permission(self, request, view):

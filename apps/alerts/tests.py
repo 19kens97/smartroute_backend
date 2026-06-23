@@ -10,7 +10,7 @@ from apps.owners.models import Owner
 from apps.tickets.models import Ticket
 from apps.vehicles.models import Vehicle
 
-from .models import Alert
+from .models import Alert, AlertReceipt
 from .services import (
     REASON_INSURANCE_EXPIRED,
     REASON_MULTIPLE_LICENSES,
@@ -31,7 +31,7 @@ class AlertApiTests(APITestCase):
             created_by=self.field,
             alert_type=Alert.TYPE_FIELD_ESCAPE,
             plate_number="HT-100",
-            description="Le véhicule a quitté le contrôle sans autorisation.",
+            description="Le vÃ©hicule a quittÃ© le contrÃ´le sans autorisation.",
         )
 
     def auth(self, user):
@@ -41,7 +41,7 @@ class AlertApiTests(APITestCase):
         return {
             "alert_type": alert_type,
             "plate_number": plate_number,
-            "description": "Description opérationnelle suffisamment précise.",
+            "description": "Description opÃ©rationnelle suffisamment prÃ©cise.",
         }
 
     def test_all_authenticated_roles_can_list_and_retrieve(self):
@@ -125,7 +125,7 @@ class AlertApiTests(APITestCase):
             f"/api/alerts/{self.alert.pk}/",
             {
                 "plate_number": "  ht-999  ",
-                "description": "Description corrigée par l'agent de saisie.",
+                "description": "Description corrigÃ©e par l'agent de saisie.",
                 "created_by": self.entry.pk,
                 "source": Alert.SOURCE_SYSTEM,
             },
@@ -143,7 +143,7 @@ class AlertApiTests(APITestCase):
             f"/api/alerts/{self.alert.pk}/",
             {
                 "plate_number": "HT-777",
-                "description": "Description complète mise à jour avec PUT.",
+                "description": "Description complÃ¨te mise Ã  jour avec PUT.",
             },
             format="json",
         )
@@ -155,7 +155,7 @@ class AlertApiTests(APITestCase):
             self.auth(user)
             response = self.client.patch(
                 f"/api/alerts/{self.alert.pk}/",
-                {"description": "Tentative de modification refusée."},
+                {"description": "Tentative de modification refusÃ©e."},
                 format="json",
             )
             self.assertEqual(response.status_code, 403)
@@ -198,12 +198,97 @@ class AlertApiTests(APITestCase):
         self.assertEqual(response.data["count"], 1)
 
 
+class AlertReceiptApiTests(APITestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.author = User.objects.create_user(username="receipt_author", role="AGENT_TERRAIN")
+        self.reader_a = User.objects.create_user(username="receipt_reader_a", role="AGENT_TERRAIN")
+        self.reader_b = User.objects.create_user(username="receipt_reader_b", role="AGENT_SAISIE")
+        self.alert = Alert.objects.create(
+            created_by=self.author,
+            alert_type=Alert.TYPE_FIELD_ESCAPE,
+            description="Le conducteur a pris la fuite pendant le contrôle.",
+        )
+        self.system_alert = Alert.objects.create(
+            alert_type=Alert.TYPE_JUDICIAL,
+            source=Alert.SOURCE_SYSTEM,
+            description="Alerte automatique contextuelle.",
+            deduplication_key="JUDICIAL:RECEIPT-TEST",
+        )
+
+    def auth(self, user):
+        self.client.force_authenticate(user=user)
+
+    def recent_unread(self):
+        return self.client.get("/api/alerts/recent-unread/")
+
+    def test_creator_is_opened_and_other_user_receives_new_manual_alert(self):
+        self.auth(self.author)
+        response = self.client.post(
+            "/api/alerts/",
+            {"alert_type": Alert.TYPE_REFUSED_CONTROL, "description": "Le conducteur refuse le contrôle routier."},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        created_alert = Alert.objects.get(pk=response.data["id"])
+        self.assertEqual(created_alert.created_by, self.author)
+        self.assertTrue(AlertReceipt.objects.filter(alert=created_alert, user=self.author, opened_at__isnull=False).exists())
+        self.assertEqual(self.recent_unread().data["data"]["unread_count"], 0)
+
+        self.auth(self.reader_a)
+        unread = self.recent_unread()
+        self.assertEqual(unread.data["data"]["unread_count"], 2)
+        self.assertEqual(unread.data["data"]["results"][0]["id"], created_alert.id)
+
+    def test_opening_is_per_user_and_idempotent(self):
+        self.auth(self.reader_a)
+        first = self.client.post(f"/api/alerts/{self.alert.pk}/mark-opened/")
+        self.assertEqual(first.status_code, 200)
+        receipt = AlertReceipt.objects.get(alert=self.alert, user=self.reader_a)
+        opened_at = receipt.opened_at
+        self.assertEqual(self.recent_unread().data["data"]["unread_count"], 0)
+
+        second = self.client.post(f"/api/alerts/{self.alert.pk}/mark-opened/")
+        self.assertEqual(second.status_code, 200)
+        receipt.refresh_from_db()
+        self.assertEqual(receipt.opened_at, opened_at)
+        self.assertEqual(AlertReceipt.objects.filter(alert=self.alert, user=self.reader_a).count(), 1)
+
+        self.auth(self.reader_b)
+        self.assertEqual(self.recent_unread().data["data"]["unread_count"], 1)
+        self.assertFalse(AlertReceipt.objects.filter(alert=self.alert, user=self.reader_b).exists())
+
+    def test_recent_unread_excludes_system_and_opened_alerts_and_is_ordered(self):
+        newer = Alert.objects.create(
+            created_by=self.author,
+            alert_type=Alert.TYPE_SUSPICIOUS_BEHAVIOR,
+            description="Comportement suspect observé pendant le contrôle.",
+        )
+        self.auth(self.reader_a)
+        AlertReceipt.objects.create(alert=self.alert, user=self.reader_a, opened_at=timezone.now())
+        response = self.recent_unread()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["unread_count"], 1)
+        self.assertEqual([item["id"] for item in response.data["data"]["results"]], [newer.id])
+        self.assertNotIn(self.system_alert.id, [item["id"] for item in response.data["data"]["results"]])
+
+    def test_unread_list_filter_uses_regular_pagination(self):
+        self.auth(self.reader_a)
+        response = self.client.get("/api/alerts/", {"unread": "true"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.alert.id)
+
+    def test_unread_and_mark_opened_require_authentication(self):
+        self.assertEqual(self.recent_unread().status_code, 401)
+        self.assertEqual(self.client.post(f"/api/alerts/{self.alert.pk}/mark-opened/").status_code, 401)
+
 class JudicialAlertServiceTests(APITestCase):
     def setUp(self):
         User = get_user_model()
         self.actor = User.objects.create_user(username="judicial_actor", role="AGENT_TERRAIN")
         self.today = timezone.localdate()
-        self.owner = Owner.objects.create(full_name="Jean Contrôle", national_id="001-234-567-8")
+        self.owner = Owner.objects.create(full_name="Jean ContrÃ´le", national_id="001-234-567-8")
         self.vehicle = Vehicle.objects.create(
             plate_number="JD-100",
             owner=self.owner,

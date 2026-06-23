@@ -1,4 +1,4 @@
-from django.conf import settings
+﻿from django.conf import settings
 from django.db import models
 
 from apps.core.models import TimeStampedModel
@@ -45,3 +45,24 @@ class Alert(TimeStampedModel):
     def save(self, *args, **kwargs):
         self.plate_number = normalize_plate_number(self.plate_number)
         super().save(*args, **kwargs)
+
+
+class AlertReceipt(TimeStampedModel):
+    alert = models.ForeignKey(Alert, on_delete=models.CASCADE, related_name="receipts")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="alert_receipts",
+    )
+    opened_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("alert", "user"),
+                name="unique_alert_receipt_per_user",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.alert_id}:{self.user_id}"

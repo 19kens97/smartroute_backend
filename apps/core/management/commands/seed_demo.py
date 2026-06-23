@@ -1,10 +1,14 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 from apps.alerts.models import Alert
 from apps.documents.models import Document
 from apps.drivers.models import Driver
 from apps.infractions.models import Infraction
+from apps.insurance.models import InsurancePolicy
 from apps.owners.models import Owner
 from apps.scans.models import Scan
 from apps.sync.models import SyncLog
@@ -66,6 +70,16 @@ class Command(BaseCommand):
             vehicle, _ = Vehicle.objects.get_or_create(plate_number=plate, defaults=data)
             vehicles.append(vehicle)
 
+        today = timezone.localdate()
+        insurance_data = [
+            {"vehicle": vehicles[0], "insurer": "OAVCT", "policy_number": "OAVCT-AA12345", "valid_until": today + timedelta(days=180), "status": InsurancePolicy.STATUS_VALID},
+            {"vehicle": vehicles[1], "insurer": "OAVCT", "policy_number": "OAVCT-BB54321", "valid_until": today - timedelta(days=30), "status": InsurancePolicy.STATUS_EXPIRED},
+            {"vehicle": vehicles[2], "insurer": "Haiti Assurance", "policy_number": "HA-CC67890", "valid_until": today + timedelta(days=90), "status": InsurancePolicy.STATUS_SUSPENDED},
+        ]
+        for data in insurance_data:
+            policy_number = data["policy_number"]
+            defaults = {key: value for key, value in data.items() if key != "policy_number"}
+            InsurancePolicy.objects.update_or_create(policy_number=policy_number, defaults=defaults)
         drivers_data = [
             {
                 "full_name": "Marc Louis",

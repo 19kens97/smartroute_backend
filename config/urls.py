@@ -19,6 +19,7 @@ urlpatterns = [
     path("api/vehicles/", include("apps.vehicles.urls")),
     path("api/documents/", include("apps.documents.urls")),
     path("api/drivers/", include("apps.drivers.urls")),
+    path("api/insurance/", include("apps.insurance.urls")),
     path("api/scans/", include("apps.scans.urls")),
     path("api/gemini/scan-plate/", gemini_scan_plate_view),
     path("api/infractions/", include("apps.infractions.urls")),

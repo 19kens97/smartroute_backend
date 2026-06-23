@@ -1,4 +1,4 @@
-from datetime import timedelta
+﻿from datetime import timedelta
 from pathlib import Path
 from decouple import config
 
@@ -73,6 +73,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 PRIVATE_SIGNATURE_ROOT = BASE_DIR / "private" / "agent-signatures"
+PRIVATE_ALERT_EVIDENCE_ROOT = BASE_DIR / "private" / "alert-evidence"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = [o.strip() for o in config("CORS_ALLOWED_ORIGINS", default="").split(",") if o.strip()]
 CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", cast=bool, default=False)
@@ -123,3 +124,11 @@ if USE_CELERY:
 
 SECURE_UPLOAD_MAX_MB = 5
 ALLOWED_UPLOAD_EXTENSIONS = [".jpg", ".jpeg", ".png", ".pdf"]
+ALERT_EVIDENCE_AUDIO_MAX_MB = 10
+ALERT_EVIDENCE_VIDEO_MAX_MB = 35
+ALERT_EVIDENCE_AUDIO_MAX_DURATION_SECONDS = 180
+ALERT_EVIDENCE_VIDEO_MAX_DURATION_SECONDS = 60
+ALERT_EVIDENCE_ALLOWED_AUDIO_MIME_TYPES = ["audio/m4a", "audio/mp4", "audio/aac", "audio/mpeg", "audio/x-m4a"]
+ALERT_EVIDENCE_ALLOWED_VIDEO_MIME_TYPES = ["video/mp4", "video/quicktime"]
+ALERT_EVIDENCE_ALLOWED_AUDIO_EXTENSIONS = [".m4a", ".mp4", ".aac", ".mp3"]
+ALERT_EVIDENCE_ALLOWED_VIDEO_EXTENSIONS = [".mp4", ".mov"]

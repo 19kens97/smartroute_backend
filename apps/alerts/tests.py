@@ -1,7 +1,11 @@
+﻿import shutil
+import tempfile
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from django.utils import timezone
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APITestCase
 
 from apps.drivers.models import Driver
@@ -10,7 +14,7 @@ from apps.owners.models import Owner
 from apps.tickets.models import Ticket
 from apps.vehicles.models import Vehicle
 
-from .models import Alert, AlertReceipt
+from .models import Alert, AlertEvidence, AlertReceipt, private_alert_evidence_storage
 from .services import (
     REASON_INSURANCE_EXPIRED,
     REASON_MULTIPLE_LICENSES,
@@ -31,7 +35,7 @@ class AlertApiTests(APITestCase):
             created_by=self.field,
             alert_type=Alert.TYPE_FIELD_ESCAPE,
             plate_number="HT-100",
-            description="Le vÃ©hicule a quittÃ© le contrÃ´le sans autorisation.",
+            description="Le vÃƒÂ©hicule a quittÃƒÂ© le contrÃƒÂ´le sans autorisation.",
         )
 
     def auth(self, user):
@@ -41,7 +45,7 @@ class AlertApiTests(APITestCase):
         return {
             "alert_type": alert_type,
             "plate_number": plate_number,
-            "description": "Description opÃ©rationnelle suffisamment prÃ©cise.",
+            "description": "Description opÃƒÂ©rationnelle suffisamment prÃƒÂ©cise.",
         }
 
     def test_all_authenticated_roles_can_list_and_retrieve(self):
@@ -125,7 +129,7 @@ class AlertApiTests(APITestCase):
             f"/api/alerts/{self.alert.pk}/",
             {
                 "plate_number": "  ht-999  ",
-                "description": "Description corrigÃ©e par l'agent de saisie.",
+                "description": "Description corrigÃƒÂ©e par l'agent de saisie.",
                 "created_by": self.entry.pk,
                 "source": Alert.SOURCE_SYSTEM,
             },
@@ -143,7 +147,7 @@ class AlertApiTests(APITestCase):
             f"/api/alerts/{self.alert.pk}/",
             {
                 "plate_number": "HT-777",
-                "description": "Description complÃ¨te mise Ã  jour avec PUT.",
+                "description": "Description complÃƒÂ¨te mise ÃƒÂ  jour avec PUT.",
             },
             format="json",
         )
@@ -155,7 +159,7 @@ class AlertApiTests(APITestCase):
             self.auth(user)
             response = self.client.patch(
                 f"/api/alerts/{self.alert.pk}/",
-                {"description": "Tentative de modification refusÃ©e."},
+                {"description": "Tentative de modification refusÃƒÂ©e."},
                 format="json",
             )
             self.assertEqual(response.status_code, 403)
@@ -207,7 +211,7 @@ class AlertReceiptApiTests(APITestCase):
         self.alert = Alert.objects.create(
             created_by=self.author,
             alert_type=Alert.TYPE_FIELD_ESCAPE,
-            description="Le conducteur a pris la fuite pendant le contrôle.",
+            description="Le conducteur a pris la fuite pendant le contrÃ´le.",
         )
         self.system_alert = Alert.objects.create(
             alert_type=Alert.TYPE_JUDICIAL,
@@ -226,7 +230,7 @@ class AlertReceiptApiTests(APITestCase):
         self.auth(self.author)
         response = self.client.post(
             "/api/alerts/",
-            {"alert_type": Alert.TYPE_REFUSED_CONTROL, "description": "Le conducteur refuse le contrôle routier."},
+            {"alert_type": Alert.TYPE_REFUSED_CONTROL, "description": "Le conducteur refuse le contrÃ´le routier."},
             format="json",
         )
         self.assertEqual(response.status_code, 201)
@@ -262,7 +266,7 @@ class AlertReceiptApiTests(APITestCase):
         newer = Alert.objects.create(
             created_by=self.author,
             alert_type=Alert.TYPE_SUSPICIOUS_BEHAVIOR,
-            description="Comportement suspect observé pendant le contrôle.",
+            description="Comportement suspect observÃ© pendant le contrÃ´le.",
         )
         self.auth(self.reader_a)
         AlertReceipt.objects.create(alert=self.alert, user=self.reader_a, opened_at=timezone.now())
@@ -288,7 +292,7 @@ class JudicialAlertServiceTests(APITestCase):
         User = get_user_model()
         self.actor = User.objects.create_user(username="judicial_actor", role="AGENT_TERRAIN")
         self.today = timezone.localdate()
-        self.owner = Owner.objects.create(full_name="Jean ContrÃ´le", national_id="001-234-567-8")
+        self.owner = Owner.objects.create(full_name="Jean ContrÃƒÂ´le", national_id="001-234-567-8")
         self.vehicle = Vehicle.objects.create(
             plate_number="JD-100",
             owner=self.owner,
@@ -414,3 +418,152 @@ class JudicialAlertServiceTests(APITestCase):
                 period_end=self.today - timedelta(days=1),
             )
         self.assertFalse(Alert.objects.exists())
+
+
+class AlertEvidenceApiTests(APITestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.field = User.objects.create_user(username="evidence_field", password="Pass1234!", role="AGENT_TERRAIN")
+        self.reader = User.objects.create_user(username="evidence_reader", password="Pass1234!", role="AGENT_SAISIE")
+        self.temp_root = tempfile.mkdtemp()
+        self.original_storage_location = private_alert_evidence_storage._location
+        private_alert_evidence_storage._location = self.temp_root
+        private_alert_evidence_storage.__dict__.pop("base_location", None)
+        private_alert_evidence_storage.__dict__.pop("location", None)
+
+    def tearDown(self):
+        private_alert_evidence_storage._location = self.original_storage_location
+        private_alert_evidence_storage.__dict__.pop("base_location", None)
+        private_alert_evidence_storage.__dict__.pop("location", None)
+        shutil.rmtree(self.temp_root, ignore_errors=True)
+
+    def auth(self, user=None):
+        self.client.force_authenticate(user=user or self.field)
+
+    def payload(self, **extra):
+        data = {
+            "alert_type": Alert.TYPE_FIELD_ESCAPE,
+            "plate_number": "",
+            "description": "Description opérationnelle suffisamment précise.",
+        }
+        data.update(extra)
+        return data
+
+    def upload(self, name="proof.m4a", content_type="audio/mp4", size=32):
+        return SimpleUploadedFile(name, b"a" * size, content_type=content_type)
+
+    def create_audio_alert(self):
+        self.auth()
+        return self.client.post(
+            "/api/alerts/",
+            self.payload(
+                evidence_type=AlertEvidence.TYPE_AUDIO,
+                evidence_file=self.upload(),
+                evidence_duration_seconds=42,
+            ),
+            format="multipart",
+        )
+
+    def test_create_alert_without_evidence_still_works(self):
+        self.auth()
+        response = self.client.post("/api/alerts/", self.payload(), format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["evidence"], [])
+        self.assertEqual(AlertEvidence.objects.count(), 0)
+
+    def test_create_alert_with_valid_audio_evidence(self):
+        response = self.create_audio_alert()
+        self.assertEqual(response.status_code, 201, response.data)
+        evidence = AlertEvidence.objects.get()
+        self.assertEqual(evidence.evidence_type, AlertEvidence.TYPE_AUDIO)
+        self.assertEqual(evidence.mime_type, "audio/mp4")
+        self.assertEqual(evidence.duration_seconds, 42)
+        self.assertEqual(evidence.created_by, self.field)
+        self.assertTrue(evidence.file.name.startswith(f"alerts/{evidence.alert_id}/"))
+        self.assertIn("/api/alerts/", response.data["evidence"][0]["url"])
+        self.assertNotIn(self.temp_root, response.data["evidence"][0]["url"])
+
+    def test_create_alert_with_valid_video_evidence(self):
+        self.auth()
+        response = self.client.post(
+            "/api/alerts/",
+            self.payload(
+                evidence_type=AlertEvidence.TYPE_VIDEO,
+                evidence_file=self.upload("proof.mp4", "video/mp4"),
+                evidence_duration_seconds=12,
+            ),
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        evidence = AlertEvidence.objects.get()
+        self.assertEqual(evidence.evidence_type, AlertEvidence.TYPE_VIDEO)
+        self.assertEqual(evidence.mime_type, "video/mp4")
+
+    def test_invalid_mime_type_is_rejected(self):
+        self.auth()
+        response = self.client.post(
+            "/api/alerts/",
+            self.payload(evidence_type=AlertEvidence.TYPE_AUDIO, evidence_file=self.upload("proof.exe", "application/x-msdownload")),
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(AlertEvidence.objects.count(), 0)
+
+    @override_settings(ALERT_EVIDENCE_AUDIO_MAX_MB=0)
+    def test_file_too_large_is_rejected(self):
+        self.auth()
+        response = self.client.post(
+            "/api/alerts/",
+            self.payload(evidence_type=AlertEvidence.TYPE_AUDIO, evidence_file=self.upload(size=1)),
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(AlertEvidence.objects.count(), 0)
+
+    def test_evidence_type_without_file_is_rejected(self):
+        self.auth()
+        response = self.client.post(
+            "/api/alerts/",
+            self.payload(evidence_type=AlertEvidence.TYPE_AUDIO),
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(AlertEvidence.objects.count(), 0)
+
+    def test_duration_limit_is_rejected(self):
+        self.auth()
+        response = self.client.post(
+            "/api/alerts/",
+            self.payload(
+                evidence_type=AlertEvidence.TYPE_AUDIO,
+                evidence_file=self.upload(),
+                evidence_duration_seconds=999,
+            ),
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(AlertEvidence.objects.count(), 0)
+
+    def test_created_by_is_backend_controlled(self):
+        self.auth()
+        response = self.client.post(
+            "/api/alerts/",
+            self.payload(created_by=self.reader.pk, evidence_type=AlertEvidence.TYPE_AUDIO, evidence_file=self.upload()),
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        evidence = AlertEvidence.objects.get()
+        self.assertEqual(Alert.objects.get(pk=response.data["id"]).created_by, self.field)
+        self.assertEqual(evidence.created_by, self.field)
+
+    def test_authenticated_users_can_read_evidence_and_anonymous_cannot(self):
+        create_response = self.create_audio_alert()
+        self.assertEqual(create_response.status_code, 201, create_response.data)
+        evidence = AlertEvidence.objects.get()
+        self.auth(self.reader)
+        response = self.client.get(f"/api/alerts/{evidence.alert_id}/evidence/{evidence.pk}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.client.force_authenticate(user=None)
+        anonymous = self.client.get(f"/api/alerts/{evidence.alert_id}/evidence/{evidence.pk}/")
+        self.assertEqual(anonymous.status_code, 401)

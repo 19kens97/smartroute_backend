@@ -1,8 +1,11 @@
-﻿from django.db.models import Exists, OuterRef
+﻿from django.db import transaction
+from django.db.models import Exists, OuterRef
+from django.http import FileResponse, Http404
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.viewsets import ModelViewSet
 
 from apps.core.api import api_response
@@ -29,14 +32,15 @@ from .serializers import AlertSerializer
         responses={200: AlertSerializer(many=True), 401: OpenApiResponse(description="Authentification JWT requise.")},
     ),
     retrieve=extend_schema(summary="Consulter une alerte", responses={200: AlertSerializer, 401: OpenApiResponse(description="Authentification JWT requise."), 404: OpenApiResponse(description="Alerte introuvable.")}),
-    create=extend_schema(summary="Créer une alerte manuelle", description="AGENT_SAISIE ou AGENT_TERRAIN selon le type.", responses={201: AlertSerializer, 400: OpenApiResponse(description="Données invalides."), 401: OpenApiResponse(description="Authentification JWT requise."), 403: OpenApiResponse(description="Rôle non autorisé.")}),
+    create=extend_schema(summary="Créer une alerte manuelle", description="AGENT_SAISIE ou AGENT_TERRAIN selon le type. Accepte JSON ou multipart/form-data avec une preuve audio/vidéo optionnelle.", responses={201: AlertSerializer, 400: OpenApiResponse(description="Données invalides."), 401: OpenApiResponse(description="Authentification JWT requise."), 403: OpenApiResponse(description="Rôle non autorisé.")}),
     update=extend_schema(summary="Modifier une alerte manuelle", description="Permission: AGENT_SAISIE uniquement.", responses={200: AlertSerializer, 400: OpenApiResponse(description="Modification interdite ou invalide."), 401: OpenApiResponse(description="Authentification JWT requise."), 403: OpenApiResponse(description="Rôle non autorisé.")}),
     partial_update=extend_schema(summary="Modifier partiellement une alerte manuelle", description="Permission: AGENT_SAISIE uniquement.", responses={200: AlertSerializer}),
 )
 class AlertViewSet(ModelViewSet):
-    queryset = Alert.objects.select_related("created_by").all().order_by("-id")
+    queryset = Alert.objects.select_related("created_by").prefetch_related("evidence").all().order_by("-id")
     serializer_class = AlertSerializer
     permission_classes = [AlertPermission]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
     pagination_class = AlertPagination
     filterset_class = AlertFilter
     http_method_names = ["get", "post", "put", "patch", "head", "options"]
@@ -61,9 +65,22 @@ class AlertViewSet(ModelViewSet):
         ).exclude(created_by=self.request.user)
 
     def perform_create(self, serializer):
-        alert = serializer.save(created_by=self.request.user, source=Alert.SOURCE_MANUAL)
-        AlertReceipt.objects.create(alert=alert, user=self.request.user, opened_at=timezone.now())
-        log_action(self.request.user, alert, "CREATE")
+        evidence_file_names = []
+        try:
+            with transaction.atomic():
+                alert = serializer.save(created_by=self.request.user, source=Alert.SOURCE_MANUAL)
+                evidence_file_names = [item.file.name for item in alert.evidence.all() if item.file]
+                AlertReceipt.objects.create(alert=alert, user=self.request.user, opened_at=timezone.now())
+                log_action(self.request.user, alert, "CREATE")
+        except Exception:
+            storage = None
+            for file_name in evidence_file_names:
+                if not storage:
+                    from .models import private_alert_evidence_storage
+                    storage = private_alert_evidence_storage
+                if storage.exists(file_name):
+                    storage.delete(file_name)
+            raise
 
     def perform_update(self, serializer):
         alert = serializer.save()
@@ -100,3 +117,18 @@ class AlertViewSet(ModelViewSet):
             "is_opened": True,
             "opened_at": receipt.opened_at,
         }, status_code=status.HTTP_200_OK)
+
+    @extend_schema(
+        summary="Lire une preuve audio ou vidéo d'alerte",
+        responses={200: OpenApiResponse(description="Flux média protégé."), 401: OpenApiResponse(description="Authentification JWT requise."), 404: OpenApiResponse(description="Preuve introuvable.")},
+    )
+    @action(detail=True, methods=["get"], url_path=r"evidence/(?P<evidence_pk>[^/.]+)")
+    def evidence(self, request, pk=None, evidence_pk=None):
+        alert = self.get_object()
+        evidence = alert.evidence.filter(pk=evidence_pk).first()
+        if evidence is None or not evidence.file:
+            raise Http404
+        response = FileResponse(evidence.file.open("rb"), content_type=evidence.mime_type or "application/octet-stream")
+        response["Cache-Control"] = "private, no-store"
+        response["Content-Disposition"] = f'inline; filename="alert-evidence-{evidence.pk}"'
+        return response

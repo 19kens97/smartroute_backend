@@ -1,4 +1,4 @@
-﻿import shutil
+import shutil
 import tempfile
 from datetime import timedelta
 
@@ -567,3 +567,180 @@ class AlertEvidenceApiTests(APITestCase):
         self.client.force_authenticate(user=None)
         anonymous = self.client.get(f"/api/alerts/{evidence.alert_id}/evidence/{evidence.pk}/")
         self.assertEqual(anonymous.status_code, 401)
+
+class AlertHistoryListApiTests(APITestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username="history_user", password="Pass1234!", role="AGENT_TERRAIN")
+        self.other = User.objects.create_user(username="history_other", password="Pass1234!", role="AGENT_SAISIE")
+        self.client.force_authenticate(user=self.user)
+
+    def create_alert(self, index, **overrides):
+        data = {
+            "created_by": self.user,
+            "alert_type": Alert.TYPE_FIELD_ESCAPE,
+            "plate_number": f"HT-{index:03d}",
+            "description": f"Description historique numero {index} pour recherche.",
+        }
+        data.update(overrides)
+        alert = Alert.objects.create(**data)
+        created_at = timezone.now() - timedelta(minutes=index)
+        Alert.objects.filter(pk=alert.pk).update(created_at=created_at, updated_at=created_at)
+        alert.refresh_from_db()
+        return alert
+
+    def create_history_set(self, count=23):
+        return [self.create_alert(index) for index in range(count)]
+
+    def ids(self, response):
+        return [item["id"] for item in response.data["results"]]
+
+    def test_alert_history_is_ordered_by_created_at_then_id_desc(self):
+        older = self.create_alert(1, plate_number="HT-OLD")
+        same_time_a = self.create_alert(2, plate_number="HT-A")
+        same_time_b = self.create_alert(3, plate_number="HT-B")
+        newer = self.create_alert(4, plate_number="HT-NEW")
+        base_time = timezone.now()
+        Alert.objects.filter(pk=older.pk).update(created_at=base_time - timedelta(days=1))
+        Alert.objects.filter(pk__in=[same_time_a.pk, same_time_b.pk]).update(created_at=base_time)
+        Alert.objects.filter(pk=newer.pk).update(created_at=base_time + timedelta(days=1))
+
+        response = self.client.get("/api/alerts/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.ids(response)[:4], [newer.id, same_time_b.id, same_time_a.id, older.id])
+
+    def test_alert_history_returns_ten_items_per_page_and_page_two(self):
+        self.create_history_set(23)
+
+        page_one = self.client.get("/api/alerts/", {"page": 1})
+        page_two = self.client.get("/api/alerts/", {"page": 2})
+
+        self.assertEqual(page_one.status_code, 200)
+        self.assertEqual(page_one.data["count"], 23)
+        self.assertEqual(len(page_one.data["results"]), 10)
+        self.assertIsNotNone(page_one.data["next"])
+        self.assertEqual(len(page_two.data["results"]), 10)
+        self.assertIsNotNone(page_two.data["previous"])
+
+    def test_alert_history_last_page_is_partial(self):
+        self.create_history_set(23)
+
+        response = self.client.get("/api/alerts/", {"page": 3})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["results"]), 3)
+        self.assertIsNone(response.data["next"])
+
+    def test_alert_history_ignores_page_size_above_ten(self):
+        self.create_history_set(12)
+
+        response = self.client.get("/api/alerts/", {"page_size": 100})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["results"]), 10)
+
+    def test_alert_history_searches_plate_description_and_type(self):
+        plate_match = self.create_alert(1, plate_number="ZZ-777", description="Controle standard.")
+        description_match = self.create_alert(2, plate_number="AA-222", description="Reflet dangereux observe.")
+        type_match = self.create_alert(3, alert_type=Alert.TYPE_REFUSED_CONTROL, plate_number="AA-333", description="Controle standard.")
+        self.create_alert(4, plate_number="AA-444", description="Controle standard.")
+
+        by_plate = self.client.get("/api/alerts/", {"search": "zz777"})
+        by_description = self.client.get("/api/alerts/", {"search": "Reflet"})
+        by_type = self.client.get("/api/alerts/", {"search": "Refus"})
+
+        self.assertEqual(self.ids(by_plate), [plate_match.id])
+        self.assertEqual(self.ids(by_description), [description_match.id])
+        self.assertEqual(self.ids(by_type), [type_match.id])
+
+    def test_alert_history_filters_one_and_multiple_types(self):
+        escape = self.create_alert(1, alert_type=Alert.TYPE_FIELD_ESCAPE)
+        refused = self.create_alert(2, alert_type=Alert.TYPE_REFUSED_CONTROL)
+        self.create_alert(3, alert_type=Alert.TYPE_SUSPICIOUS_BEHAVIOR)
+
+        single = self.client.get("/api/alerts/", {"alert_type": Alert.TYPE_FIELD_ESCAPE})
+        multiple = self.client.get("/api/alerts/", {"alert_type": [Alert.TYPE_FIELD_ESCAPE, Alert.TYPE_REFUSED_CONTROL]})
+
+        self.assertEqual(self.ids(single), [escape.id])
+        self.assertEqual(set(self.ids(multiple)), {escape.id, refused.id})
+
+    def test_alert_history_combines_search_and_filters(self):
+        match = self.create_alert(1, alert_type=Alert.TYPE_REFUSED_CONTROL, description="Mot cle combine.")
+        self.create_alert(2, alert_type=Alert.TYPE_FIELD_ESCAPE, description="Mot cle combine.")
+        self.create_alert(3, alert_type=Alert.TYPE_REFUSED_CONTROL, description="Autre contenu.")
+
+        response = self.client.get("/api/alerts/", {"search": "combine", "alert_type": Alert.TYPE_REFUSED_CONTROL})
+
+        self.assertEqual(self.ids(response), [match.id])
+
+    def test_alert_history_filters_severity_source_period_and_unread(self):
+        critical_manual = self.create_alert(1, alert_type=Alert.TYPE_FIELD_ESCAPE, source=Alert.SOURCE_MANUAL)
+        warning_manual = self.create_alert(2, alert_type=Alert.TYPE_SUSPICIOUS_BEHAVIOR, source=Alert.SOURCE_MANUAL)
+        system_alert = self.create_alert(3, alert_type=Alert.TYPE_JUDICIAL, source=Alert.SOURCE_SYSTEM, deduplication_key="JUDICIAL:HISTORY")
+        opened = self.create_alert(4, created_by=self.other, source=Alert.SOURCE_MANUAL)
+        AlertReceipt.objects.create(alert=opened, user=self.user, opened_at=timezone.now())
+        unread = self.create_alert(5, created_by=self.other, source=Alert.SOURCE_MANUAL)
+
+        severity = self.client.get("/api/alerts/", {"severity": "WARNING"})
+        source = self.client.get("/api/alerts/", {"source": Alert.SOURCE_SYSTEM})
+        created_after = (timezone.now() - timedelta(days=1)).isoformat()
+        created_before = (timezone.now() + timedelta(days=1)).isoformat()
+        period = self.client.get("/api/alerts/", {"created_after": created_after, "created_before": created_before})
+        unread_response = self.client.get("/api/alerts/", {"unread": "true"})
+
+        self.assertEqual(self.ids(severity), [warning_manual.id])
+        self.assertEqual(self.ids(source), [system_alert.id])
+        self.assertIn(critical_manual.id, self.ids(period))
+        self.assertIn(warning_manual.id, self.ids(period))
+        self.assertIn(unread.id, self.ids(unread_response))
+        self.assertNotIn(opened.id, self.ids(unread_response))
+
+    def test_alert_history_invalid_filter_value_returns_400(self):
+        response = self.client.get("/api/alerts/", {"alert_type": "UNKNOWN"})
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_alert_history_requires_authentication(self):
+        self.client.force_authenticate(user=None)
+
+        response = self.client.get("/api/alerts/")
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_alert_history_uses_light_list_serializer_and_detail_stays_complete(self):
+        alert = self.create_alert(1, description="Description detaillee conservee.")
+        AlertEvidence.objects.create(
+            alert=alert,
+            evidence_type=AlertEvidence.TYPE_AUDIO,
+            file=SimpleUploadedFile("proof.m4a", b"abc", content_type="audio/mp4"),
+            mime_type="audio/mp4",
+            created_by=self.user,
+        )
+
+        listing = self.client.get("/api/alerts/")
+        detail = self.client.get(f"/api/alerts/{alert.pk}/")
+
+        self.assertEqual(listing.status_code, 200)
+        list_item = listing.data["results"][0]
+        self.assertEqual(
+            set(list_item.keys()),
+            {"id", "alert_type", "alert_type_display", "severity", "plate_number", "source", "is_opened", "created_at"},
+        )
+        self.assertNotIn("description", list_item)
+        self.assertNotIn("evidence", list_item)
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.data["description"], "Description detaillee conservee.")
+        self.assertIn("evidence", detail.data)
+
+    def test_alert_history_list_has_no_obvious_n_plus_one_queries(self):
+        self.create_history_set(10)
+
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as context:
+            response = self.client.get("/api/alerts/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(len(context), 4)

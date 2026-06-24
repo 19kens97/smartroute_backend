@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 from django.conf import settings
 from django.db import transaction
@@ -59,7 +59,39 @@ class AlertEvidenceSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(path) if request is not None else path
 
 
-class AlertSerializer(serializers.ModelSerializer):
+class AlertPresentationMixin:
+    def get_alert_type_display(self, obj):
+        return ALERT_TYPE_LABELS.get(obj.alert_type, obj.alert_type)
+
+    def get_severity(self, obj):
+        return ALERT_SEVERITIES.get(obj.alert_type, "INFO")
+
+    def get_is_opened(self, obj):
+        return bool(getattr(obj, "is_opened_for_user", False))
+
+
+
+class AlertListSerializer(AlertPresentationMixin, serializers.ModelSerializer):
+    alert_type_display = serializers.SerializerMethodField()
+    severity = serializers.SerializerMethodField()
+    is_opened = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Alert
+        fields = (
+            "id",
+            "alert_type",
+            "alert_type_display",
+            "severity",
+            "plate_number",
+            "source",
+            "is_opened",
+            "created_at",
+        )
+        read_only_fields = fields
+
+
+class AlertSerializer(AlertPresentationMixin, serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     created_by_role = serializers.CharField(source="created_by.role", read_only=True, allow_null=True)
     alert_type_display = serializers.SerializerMethodField()
@@ -103,14 +135,6 @@ class AlertSerializer(serializers.ModelSerializer):
             return None
         return obj.created_by.get_full_name().strip() or obj.created_by.username
 
-    def get_alert_type_display(self, obj):
-        return ALERT_TYPE_LABELS.get(obj.alert_type, obj.alert_type)
-
-    def get_severity(self, obj):
-        return ALERT_SEVERITIES.get(obj.alert_type, "INFO")
-
-    def get_is_opened(self, obj):
-        return bool(getattr(obj, "is_opened_for_user", False))
 
     def _validate_evidence(self, attrs):
         evidence_file = attrs.get("evidence_file")

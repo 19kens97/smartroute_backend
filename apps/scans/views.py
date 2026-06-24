@@ -194,6 +194,9 @@ def build_vehicle_tickets_payload(vehicle):
 
 
 def generate_with_fallbacks(contents):
+    if not getattr(settings, "GEMINI_API_KEY", "").strip():
+        raise ValueError("GEMINI_API_KEY n'est pas configuree sur le backend.")
+
     from google import genai
     from google.api_core import exceptions
     from google.genai import errors as genai_errors
@@ -219,18 +222,22 @@ def generate_with_fallbacks(contents):
             if is_usable_plate(plate_candidate):
                 return response, model, plate_candidate, raw_text
             # No usable plate found in this model response; try the next one.
-            last_error = ValueError(f"Non-USABLE plate found for model {model}: {raw_text}")
+            logger.warning("Gemini model %s returned no usable plate: %s", model, raw_text)
+            last_error = ValueError(f"Aucune plaque exploitable retournee par {model}: {raw_text or 'reponse vide'}")
             continue
         except exceptions.ServiceUnavailable as e:
+            logger.warning("Gemini model %s unavailable: %s", model, e)
             last_error = e
             time.sleep(0.4)
             continue
         except genai_errors.ServerError as e:
+            logger.warning("Gemini model %s server error: %s", model, e)
             last_error = e
             if is_temporary_gemini_unavailable(e):
                 time.sleep(0.4)
             continue
         except Exception as e:
+            logger.exception("Gemini model %s failed during plate scan.", model)
             last_error = e
             continue
 

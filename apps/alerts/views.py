@@ -1,4 +1,4 @@
-﻿from django.db import transaction
+from django.db import transaction
 from django.db.models import Exists, OuterRef
 from django.http import FileResponse, Http404
 from django.utils import timezone
@@ -14,7 +14,7 @@ from .filters import AlertFilter
 from .models import Alert, AlertReceipt
 from .pagination import AlertPagination
 from .permissions import AlertPermission
-from .serializers import AlertSerializer
+from .serializers import AlertListSerializer, AlertSerializer
 
 
 @extend_schema_view(
@@ -37,13 +37,18 @@ from .serializers import AlertSerializer
     partial_update=extend_schema(summary="Modifier partiellement une alerte manuelle", description="Permission: AGENT_SAISIE uniquement.", responses={200: AlertSerializer}),
 )
 class AlertViewSet(ModelViewSet):
-    queryset = Alert.objects.select_related("created_by").prefetch_related("evidence").all().order_by("-id")
+    queryset = Alert.objects.select_related("created_by").prefetch_related("evidence").all().order_by("-created_at", "-id")
     serializer_class = AlertSerializer
     permission_classes = [AlertPermission]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     pagination_class = AlertPagination
     filterset_class = AlertFilter
     http_method_names = ["get", "post", "put", "patch", "head", "options"]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return AlertListSerializer
+        return AlertSerializer
 
     def get_queryset(self):
         queryset = super().get_queryset()

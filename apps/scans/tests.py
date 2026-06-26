@@ -5,13 +5,13 @@ from unittest.mock import patch, MagicMock
 from django.urls import resolve, Resolver404
 
 SCAN_PLATE_PATH = "/api/scans/scan-plate/"
-LEGACY_GEMINI_SCAN_PLATE_PATH = "/api/gemini/scan-plate/"
 
 
 class GeminiScanAPITests(APITestCase):
     def test_scan_plate_routes_resolve(self):
         self.assertIsNotNone(resolve(SCAN_PLATE_PATH).func)
-        self.assertIsNotNone(resolve(LEGACY_GEMINI_SCAN_PLATE_PATH).func)
+        with self.assertRaises(Resolver404):
+            resolve("/api/gemini/scan-plate/")
         with self.assertRaises(Resolver404):
             resolve("/api/scans/gemini/scan-plate/")
         with self.assertRaises(Resolver404):

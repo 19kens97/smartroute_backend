@@ -1,4 +1,4 @@
-from datetime import timedelta
+﻿from datetime import timedelta
 from pathlib import Path
 from decouple import config
 
@@ -125,12 +125,22 @@ SIMPLE_JWT = {
 USE_REDIS = config("USE_REDIS", cast=bool, default=False)
 USE_CELERY = config("USE_CELERY", cast=bool, default=False)
 REDIS_URL = config("REDIS_URL", default="redis://127.0.0.1:6379/1")
+CACHE_KEY_PREFIX = config("CACHE_KEY_PREFIX", default="smartroute")
+CACHE_TIMEOUT_SECONDS = config("CACHE_TIMEOUT_SECONDS", cast=int, default=300)
 CELERY_BROKER_URL = config("CELERY_BROKER_URL", default="redis://127.0.0.1:6379/2")
 CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND", default="redis://127.0.0.1:6379/3")
 if USE_CELERY:
     INSTALLED_APPS += ["django_celery_beat", "django_celery_results"]
 
 if USE_REDIS:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+            "KEY_PREFIX": CACHE_KEY_PREFIX,
+            "TIMEOUT": CACHE_TIMEOUT_SECONDS,
+        }
+    }
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
@@ -138,6 +148,14 @@ if USE_REDIS:
         }
     }
 else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "smartroute-local-cache",
+            "KEY_PREFIX": CACHE_KEY_PREFIX,
+            "TIMEOUT": CACHE_TIMEOUT_SECONDS,
+        }
+    }
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels.layers.InMemoryChannelLayer",

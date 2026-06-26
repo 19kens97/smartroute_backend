@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
+from apps.core.cache import invalidate_statistics_cache
 from apps.infractions.models import Infraction
 from apps.scans.models import GeminiScan, Scan
 from apps.tickets.models import Ticket, TicketInfraction
@@ -14,6 +15,7 @@ class DashboardStatisticsTests(APITestCase):
         User = get_user_model()
         self.user = User.objects.create_user(username="stats", password="pass", role="AGENT_TERRAIN")
         self.client.force_authenticate(user=self.user)
+        invalidate_statistics_cache()
 
     def set_created_at(self, obj, day):
         dt = timezone.make_aware(timezone.datetime.combine(day, timezone.datetime.min.time())) + timedelta(hours=10)
@@ -84,3 +86,19 @@ class DashboardStatisticsTests(APITestCase):
         self.client.force_authenticate(user=None)
         denied = self.client.get("/api/dashboard/summary/")
         self.assertEqual(denied.status_code, 401)
+
+    def test_dashboard_uses_cached_summary_until_invalidated(self):
+        today = timezone.localdate()
+        first = self.client.get("/api/dashboard/summary/")
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.data["data"]["totals"]["tickets"], 0)
+
+        ticket = Ticket.objects.create(agent=self.user, driver_license="CACHE", plate_number_snapshot="CC")
+        self.set_created_at(ticket, today)
+
+        cached = self.client.get("/api/dashboard/summary/")
+        self.assertEqual(cached.data["data"]["totals"]["tickets"], 0)
+
+        invalidate_statistics_cache()
+        refreshed = self.client.get("/api/dashboard/summary/")
+        self.assertEqual(refreshed.data["data"]["totals"]["tickets"], 1)

@@ -1,27 +1,33 @@
+﻿import logging
 import re
-import logging
 import time
 from datetime import date, datetime
 
 from django.conf import settings
+from django.db import transaction
 from django.http import JsonResponse
 from django.utils import timezone
-from google import genai
 from google.api_core import exceptions
 from google.genai import errors as genai_errors
 from google.genai import types
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 
-from .models import GeminiScan
-from Documents.models import VehicleInsurance, VehicleRegistration
-from Tickets.models import Ticket
-from Tickets.serializers import TicketReadSerializer
-from Vehicles.models import Vehicle
+from apps.core.cache import invalidate_statistics_cache
+from apps.scans.models import GeminiScan, Scan
 
-# Remplacez par votre cle API reelle ou utilisez une variable d'environnement
-client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 logger = logging.getLogger(__name__)
+
+
+def evaluate_vehicle_alert(vehicle, actor):
+    if vehicle is None:
+        return
+    try:
+        from apps.alerts.services import evaluate_judicial_alert
+
+        evaluate_judicial_alert(vehicle=vehicle, actor=actor)
+    except Exception:
+        logger.exception("Impossible d'evaluer l'alerte judiciaire du vehicule.")
 
 
 def is_temporary_gemini_unavailable(error: Exception) -> bool:
@@ -47,6 +53,13 @@ def is_usable_plate(plate: str) -> bool:
     return has_letter and has_digit
 
 
+def mask_plate_for_log(plate: str) -> str:
+    if not plate:
+        return ""
+    text = str(plate)
+    return f"{text[:2]}***{text[-2:]}" if len(text) > 4 else "<masked>"
+
+
 def format_plate_display(plate: str) -> str:
     normalized = normalize_plate_candidate(plate)
     if len(normalized) <= 5:
@@ -57,36 +70,39 @@ def format_plate_display(plate: str) -> str:
 def get_vehicle_by_plate(plate_number_display: str):
     if not plate_number_display:
         return None
-    return (
-        Vehicle.objects.select_related("owner")
-        .filter(plate_number=plate_number_display)
-        .first()
-    )
+    from apps.vehicles.models import Vehicle
+
+    normalized = normalize_plate_candidate(plate_number_display)
+    plate_variants = {plate_number_display, normalized}
+    if "-" in plate_number_display:
+        plate_variants.add(plate_number_display.replace("-", ""))
+    return Vehicle.objects.select_related("owner").filter(plate_number__in=list(plate_variants)).first()
 
 
 def serialize_owner(owner):
     if owner is None:
         return None
     return {
-        "nif": owner.nif,
-        "nom": owner.nom,
-        "prenom": owner.prenom,
-        "adresse": owner.adresse,
-        "phone": owner.phone,
-        "email": owner.email,
+        "nif": getattr(owner, "national_id", None),
+        "nom": getattr(owner, "full_name", None),
+        "prenom": None,
+        "adresse": getattr(owner, "address", None),
+        "phone": getattr(owner, "phone", None),
+        "email": None,
     }
 
 
 def serialize_vehicle(vehicle):
     if vehicle is None:
         return None
+    owner = getattr(vehicle, "owner", None)
     return {
         "plate_number": vehicle.plate_number,
         "brand": vehicle.brand,
         "model": vehicle.model,
         "color": vehicle.color,
         "year": vehicle.year,
-        "owner": serialize_owner(getattr(vehicle, "owner", None)),
+        "owner": serialize_owner(owner),
     }
 
 
@@ -113,16 +129,9 @@ def build_documents_style_payload(vehicle):
         }
 
     owner = getattr(vehicle, "owner", None)
-    latest_insurance = (
-        VehicleInsurance.objects.filter(vehicle=vehicle)
-        .order_by("-issued_date", "-id")
-        .first()
-    )
-    latest_registration = (
-        VehicleRegistration.objects.filter(vehicle=vehicle)
-        .order_by("-issued_date", "-id")
-        .first()
-    )
+    from apps.insurance.models import InsurancePolicy
+
+    latest_insurance = InsurancePolicy.objects.filter(vehicle=vehicle).order_by("-valid_until").first()
 
     return {
         "vehicule": {
@@ -133,61 +142,70 @@ def build_documents_style_payload(vehicle):
             "annee": vehicle.year,
         },
         "proprietaire": {
-            "nif": owner.nif,
-            "nom": owner.nom,
-            "prenom": owner.prenom,
-            "adresse": owner.adresse,
-            "telephone": owner.phone,
-            "email": owner.email,
+            "nif": getattr(owner, "national_id", None),
+            "nom": getattr(owner, "full_name", None),
+            "prenom": None,
+            "adresse": getattr(owner, "address", None),
+            "telephone": getattr(owner, "phone", None),
+            "email": None,
         }
         if owner
         else None,
         "assurance": {
             "numero_police": latest_insurance.policy_number,
-            "compagnie": latest_insurance.company_name,
-            "date_emission": format_date(latest_insurance.issued_date),
-            "date_expiration": format_date(latest_insurance.expiration_date),
-            "est_active": latest_insurance.is_active,
+            "compagnie": latest_insurance.insurer,
+            "date_emission": None,
+            "date_expiration": format_date(latest_insurance.valid_until),
+            "est_active": latest_insurance.status == InsurancePolicy.STATUS_VALID,
         }
         if latest_insurance
         else None,
         "immatriculation": {
-            "numero_immatriculation": latest_registration.registration_code,
-            "type": latest_registration.registration_type,
-            "date_emission": format_date(latest_registration.issued_date),
-            "date_expiration": format_date(latest_registration.expiry_date),
-        }
-        if latest_registration
-        else None,
+            "numero_immatriculation": vehicle.plate_number,
+            "type": None,
+            "date_emission": None,
+            "date_expiration": None,
+        },
     }
 
 
 def build_vehicle_tickets_payload(vehicle):
+    from apps.tickets.models import Ticket
+
     tickets_qs = (
-        Ticket.objects.select_related(
-            "vehicle",
-            "vehicle__owner",
-            "driver_license",
-            "driver_license__user",
-            "infraction",
-            "agent",
-        )
-        .prefetch_related("infractions")
+        Ticket.objects.select_related("vehicle", "vehicle__owner", "agent")
         .filter(vehicle=vehicle)
-        .order_by("-timestamp")
+        .order_by("-created_at")
     )
-    tickets_data = TicketReadSerializer(tickets_qs, many=True).data
+    tickets_data = []
+    for ticket in tickets_qs:
+        tickets_data.append(
+            {
+                "id": ticket.id,
+                "status": ticket.status,
+                "driver_license": ticket.driver_license,
+                "plate_number_snapshot": ticket.plate_number_snapshot,
+                "note": ticket.note,
+                "created_at": ticket.created_at.isoformat(),
+            }
+        )
     return {
         "summary": {
             "total": len(tickets_data),
-            "en_cours": sum(1 for item in tickets_data if item.get("status") == Ticket.STATUS_EN_COURS),
-            "regle": sum(1 for item in tickets_data if item.get("status") == Ticket.STATUS_REGLE),
+            "en_cours": sum(1 for item in tickets_data if item.get("status") == "PENDING_SYNC"),
+            "regle": sum(1 for item in tickets_data if item.get("status") == "VALIDATED"),
         },
         "items": tickets_data,
     }
 
 
 def generate_with_fallbacks(contents):
+    if not getattr(settings, "GEMINI_API_KEY", "").strip():
+        raise ValueError("GEMINI_API_KEY n'est pas configuree sur le backend.")
+
+    from google import genai
+
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
     primary_model = getattr(settings, "GEMINI_MODEL", "gemini-2.5-flash")
     fallback_models = getattr(settings, "GEMINI_FALLBACK_MODELS", [])
     models = [primary_model, *fallback_models]
@@ -201,19 +219,28 @@ def generate_with_fallbacks(contents):
             )
             raw_text = (getattr(response, "text", "") or "").strip()
             plate_candidate = normalize_plate_candidate(raw_text)
-            # Flux simple: on renvoie la reponse Gemini meme si elle n'est pas
-            # encore exploitable, puis on traite ensuite pour l'affichage.
-            return response, model, plate_candidate, raw_text
+            if settings.GEMINI_LOG_RESPONSE:
+                logger.info("Gemini response for model %s: %s", model, raw_text)
+            if settings.GEMINI_LOG_RAW_RESPONSE:
+                logger.debug("Gemini raw response object: %s", response)
+            if is_usable_plate(plate_candidate):
+                return response, model, plate_candidate, raw_text
+            logger.warning("Gemini model %s returned no usable plate: %s", model, raw_text)
+            last_error = ValueError(f"Aucune plaque exploitable retournee par {model}: {raw_text or 'reponse vide'}")
+            continue
         except exceptions.ServiceUnavailable as e:
+            logger.warning("Gemini model %s unavailable: %s", model, e)
             last_error = e
             time.sleep(0.4)
             continue
         except genai_errors.ServerError as e:
+            logger.warning("Gemini model %s server error: %s", model, e)
             last_error = e
             if is_temporary_gemini_unavailable(e):
                 time.sleep(0.4)
             continue
         except Exception as e:
+            logger.exception("Gemini model %s failed during plate scan.", model)
             last_error = e
             continue
 
@@ -225,130 +252,107 @@ def generate_with_fallbacks(contents):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def extract_license_plate(request):
-    if request.FILES.get("image"):
+    image_file = request.FILES.get("image")
+    if image_file is None:
+        return JsonResponse({"status": "error", "message": "Une image est requise."}, status=400)
+
+    try:
+        logger.info(
+            "event=gemini_scan_started request_id=%s user_id=%s filename=%s content_type=%s",
+            getattr(request, "request_id", "-"),
+            request.user.pk,
+            getattr(image_file, "name", ""),
+            getattr(image_file, "content_type", ""),
+        )
+        image_bytes = image_file.read()
+        if not image_bytes:
+            return JsonResponse({"status": "error", "message": "Le fichier image est vide."}, status=400)
+
+        prompt = (
+            "Identifie la plaque d'immatriculation sur cette image. "
+            "Renvoie uniquement le numero de la plaque, sans texte additionnel, "
+            "sans ponctuation inutile, en majuscules."
+        )
+
+        contents = [
+            types.Part.from_bytes(
+                data=image_bytes,
+                mime_type=image_file.content_type or "image/jpeg",
+            ),
+            prompt,
+        ]
+        _response, model_used, plate_number, raw_text = generate_with_fallbacks(contents)
+        plate_number_display = format_plate_display(plate_number) if plate_number else ""
+        vehicle = get_vehicle_by_plate(plate_number_display) if plate_number_display else None
+        logger.info(
+            "event=gemini_plate_detected request_id=%s user_id=%s plate=%s model=%s vehicle_id=%s",
+            getattr(request, "request_id", "-"),
+            request.user.pk,
+            mask_plate_for_log(plate_number_display),
+            model_used,
+            getattr(vehicle, "pk", None),
+        )
+        evaluate_vehicle_alert(vehicle, request.user)
+
+        scan_entry = None
         try:
-            # 1. Recuperer l'image depuis la requete
-            image_file = request.FILES["image"]
-            image_bytes = image_file.read()
-
-            # 2. Preparer le prompt specifique pour le LPR (License Plate Recognition)
-            prompt = (
-                "Identifie la plaque d'immatriculation sur cette image. "
-                "Renvoie uniquement le numero de la plaque, sans texte additionnel, "
-                "sans ponctuation inutile, en majuscules."
-            )
-
-            # 3. Appel a Gemini avec fallback automatique par modele
-            contents = [
-                types.Part.from_bytes(
-                    data=image_bytes,
-                    mime_type=image_file.content_type or "image/jpeg",
-                ),
-                prompt,
-            ]
-            _response, model_used, plate_number, raw_text = generate_with_fallbacks(contents)
-            plate_number_display = format_plate_display(plate_number) if plate_number else ""
-            vehicle = get_vehicle_by_plate(plate_number_display) if plate_number_display else None
-            scan_entry = None
-            try:
-                if plate_number_display:
-                    scan_entry = GeminiScan.objects.create(
-                        plate_number=plate_number_display,
-                        model_used=model_used,
-                        vehicle=vehicle,
-                        agent=request.user,
-                    )
-            except Exception:
-                logger.exception("Impossible d'enregistrer le scan Gemini en base.")
-
-            documents_payload = build_documents_style_payload(vehicle)
-
-            return JsonResponse(
-                {
-                    "status": "success",
-                    "raw_response": raw_text,
-                    "plate_number": plate_number_display,
-                    "plate_detected": bool(plate_number_display),
-                    "model_used": model_used,
-                    "vehicle": serialize_vehicle(vehicle),
-                    "documents": documents_payload,
-                    "scanned_at": format_datetime(getattr(scan_entry, "scanned_at", timezone.now())),
-                }
-            )
-
-        except ValueError as e:
-            return JsonResponse(
-                {"status": "error", "message": str(e)},
-                status=422,
-            )
-        except exceptions.InvalidArgument:
-            return JsonResponse(
-                {
-                    "status": "error",
-                    "message": "Image invalide ou format non supporte.",
-                },
-                status=400,
-            )
-        except exceptions.Unauthenticated:
-            return JsonResponse(
-                {
-                    "status": "error",
-                    "message": "Configuration Gemini invalide (authentification).",
-                },
-                status=502,
-            )
-        except exceptions.PermissionDenied:
-            return JsonResponse(
-                {
-                    "status": "error",
-                    "message": "Acces Gemini refuse. Verifiez la configuration du projet Google.",
-                },
-                status=502,
-            )
-        except exceptions.ResourceExhausted:
-            return JsonResponse(
-                {
-                    "status": "error",
-                    "message": "Quota Gemini depasse. Reessayez plus tard.",
-                },
-                status=429,
-            )
-        except exceptions.ServiceUnavailable:
-            return JsonResponse(
-                {
-                    "status": "error",
-                    "message": "Le service est temporairement surcharge. Reessayez dans quelques instants.",
-                },
-                status=503,
-            )
-        except genai_errors.ServerError as e:
-            if is_temporary_gemini_unavailable(e):
-                return JsonResponse(
-                    {
-                        "status": "error",
-                        "message": "Le service Gemini est temporairement surcharge. Reessayez dans quelques instants.",
-                    },
-                    status=503,
+            with transaction.atomic():
+                scan_entry = GeminiScan.objects.create(
+                    plate_number=plate_number_display,
+                    model_used=model_used,
+                    raw_response=raw_text,
+                    plate_detected=bool(plate_number_display and is_usable_plate(plate_number_display)),
+                    vehicle=vehicle,
+                    agent=request.user,
                 )
-            logger.exception("Erreur Gemini (ServerError) pendant le scan de plaque.")
-            return JsonResponse(
-                {
-                    "status": "error",
-                    "message": "Erreur de service Gemini pendant l'analyse de l'image.",
-                },
-                status=502,
+                transaction.on_commit(invalidate_statistics_cache)
+            logger.info(
+                "event=gemini_scan_saved request_id=%s scan_id=%s user_id=%s plate=%s vehicle_id=%s",
+                getattr(request, "request_id", "-"),
+                scan_entry.pk,
+                request.user.pk,
+                mask_plate_for_log(plate_number_display),
+                getattr(vehicle, "pk", None),
             )
         except Exception:
-            logger.exception("Erreur inattendue pendant le scan de plaque Gemini.")
-            return JsonResponse(
-                {
-                    "status": "error",
-                    "message": "Erreur interne pendant l'analyse de l'image.",
-                },
-                status=500,
-            )
+            logger.exception("Impossible d'enregistrer le scan Gemini en base.")
 
-    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+        return JsonResponse(
+            {
+                "status": "success",
+                "raw_response": raw_text,
+                "plate_number": plate_number_display,
+                "plate_detected": bool(plate_number_display and is_usable_plate(plate_number_display)),
+                "model_used": model_used,
+                "vehicle": serialize_vehicle(vehicle),
+                "documents": build_documents_style_payload(vehicle),
+                "scanned_at": format_datetime(getattr(scan_entry, "scanned_at", timezone.now())),
+            }
+        )
+
+    except ValueError as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=422)
+    except exceptions.InvalidArgument:
+        return JsonResponse({"status": "error", "message": "Image invalide ou format non supporte."}, status=400)
+    except exceptions.Unauthenticated:
+        return JsonResponse({"status": "error", "message": "Configuration Gemini invalide (authentification)."}, status=502)
+    except exceptions.PermissionDenied:
+        return JsonResponse({"status": "error", "message": "Acces Gemini refuse. Verifiez la configuration du projet Google."}, status=502)
+    except exceptions.ResourceExhausted:
+        return JsonResponse({"status": "error", "message": "Quota Gemini depasse. Reessayez plus tard."}, status=429)
+    except exceptions.ServiceUnavailable:
+        return JsonResponse({"status": "error", "message": "Le service est temporairement surcharge. Reessayez dans quelques instants."}, status=503)
+    except genai_errors.ServerError as e:
+        if is_temporary_gemini_unavailable(e):
+            return JsonResponse(
+                {"status": "error", "message": "Le service Gemini est temporairement surcharge. Reessayez dans quelques instants."},
+                status=503,
+            )
+        logger.exception("Erreur Gemini (ServerError) pendant le scan de plaque.")
+        return JsonResponse({"status": "error", "message": "Erreur de service Gemini pendant l'analyse de l'image."}, status=502)
+    except Exception:
+        logger.exception("Erreur inattendue pendant le scan de plaque Gemini.")
+        return JsonResponse({"status": "error", "message": "Erreur interne pendant l'analyse de l'image."}, status=500)
 
 
 @api_view(["GET"])
@@ -361,10 +365,7 @@ def get_last_scan(request):
         .first()
     )
     if not last_scan:
-        return JsonResponse(
-            {"status": "error", "message": "Aucun scan disponible pour le moment."},
-            status=404,
-        )
+        return JsonResponse({"status": "error", "message": "Aucun scan disponible pour le moment."}, status=404)
 
     return JsonResponse(
         {
@@ -382,28 +383,40 @@ def get_last_scan(request):
 def search_plate(request):
     plate_raw = (request.query_params.get("plate_number") or "").strip()
     if not plate_raw:
-        return JsonResponse(
-            {"status": "error", "message": "Le parametre plate_number est requis."},
-            status=400,
-        )
+        return JsonResponse({"status": "error", "message": "Le parametre plate_number est requis."}, status=400)
 
     plate_number_display = format_plate_display(plate_raw)
-    vehicle = get_vehicle_by_plate(plate_number_display)
-    if vehicle is None:
+    if not is_usable_plate(plate_number_display):
         return JsonResponse(
-            {
-                "status": "error",
-                "message": "Vehicule introuvable pour cette plaque.",
-                "plate_number": plate_number_display,
-            },
-            status=404,
+            {"status": "error", "message": "Le numero de plaque est invalide.", "plate_number": plate_number_display},
+            status=422,
         )
+
+    vehicle = get_vehicle_by_plate(plate_number_display)
+    evaluate_vehicle_alert(vehicle, request.user)
+
+    try:
+        scan = Scan.objects.create(agent=request.user, plate_number=plate_number_display, source="MANUAL")
+        transaction.on_commit(invalidate_statistics_cache)
+        logger.info(
+            "event=manual_plate_search_saved request_id=%s scan_id=%s user_id=%s plate=%s vehicle_id=%s",
+            getattr(request, "request_id", "-"),
+            scan.pk,
+            request.user.pk,
+            mask_plate_for_log(plate_number_display),
+            getattr(vehicle, "pk", None),
+        )
+    except Exception:
+        logger.exception("Impossible d'enregistrer la recherche manuelle en base.")
 
     return JsonResponse(
         {
             "status": "success",
             "plate_number": plate_number_display,
+            "plate_detected": True,
             "vehicle": serialize_vehicle(vehicle),
-            "tickets": build_vehicle_tickets_payload(vehicle),
+            "documents": build_documents_style_payload(vehicle),
+            "scanned_at": format_datetime(timezone.now()),
+            "tickets": build_vehicle_tickets_payload(vehicle) if vehicle else {"summary": {"total": 0, "en_cours": 0, "regle": 0}, "items": []},
         }
     )

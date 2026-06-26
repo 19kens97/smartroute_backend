@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 from datetime import timedelta
 
 from django.db.models import Count
@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.core.api import api_response
-from apps.infractions.models import Infraction
+from apps.core.cache import DASHBOARD_CACHE_TTL_SECONDS, dashboard_cache_key, safe_cache_get, safe_cache_set
 from apps.scans.models import GeminiScan, Scan
 from apps.sync.models import SyncLog
 from apps.tickets.models import Ticket, TicketInfraction
@@ -34,10 +34,7 @@ class DashboardSummaryView(APIView):
         end_dt = timezone.make_aware(timezone.datetime.combine(today + timedelta(days=1), timezone.datetime.min.time()))
         return today, start_date, start_dt, end_dt
 
-    def get(self, request):
-        started_at = timezone.now()
-        days = self.get_days(request)
-        logger.info("event=dashboard_summary_started request_id=%s user_id=%s days=%s", getattr(request, "request_id", "-"), request.user.pk, days)
+    def build_summary(self, days):
         today, start_date, start_dt, end_dt = self.get_period(days)
         dates = [start_date + timedelta(days=index) for index in range(days)]
 
@@ -103,7 +100,7 @@ class DashboardSummaryView(APIView):
         ]
 
         by_status = dict(Ticket.objects.values_list("status").annotate(c=Count("id")))
-        data = {
+        return {
             "period": {
                 "days": days,
                 "start_date": start_date.isoformat(),
@@ -125,9 +122,29 @@ class DashboardSummaryView(APIView):
             "pending_sync": pending_sync,
             "alerts_today": 0,
         }
+
+    def get(self, request):
+        started_at = timezone.now()
+        days = self.get_days(request)
+        request_id = getattr(request, "request_id", "-")
+        logger.info("event=dashboard_summary_started request_id=%s user_id=%s days=%s", request_id, request.user.pk, days)
+
+        cache_key = dashboard_cache_key(days)
+        data = safe_cache_get(cache_key)
+        cache_status = "hit" if data is not None else "miss"
+        if data is None:
+            data = self.build_summary(days)
+            safe_cache_set(cache_key, data, timeout=DASHBOARD_CACHE_TTL_SECONDS)
+
         duration_ms = (timezone.now() - started_at).total_seconds() * 1000
-        logger.info("event=dashboard_summary_completed request_id=%s user_id=%s days=%s scans=%s tickets=%s duration_ms=%.2f", getattr(request, "request_id", "-"), request.user.pk, days, scans_total, tickets_total, duration_ms)
+        logger.info(
+            "event=dashboard_summary_completed request_id=%s user_id=%s days=%s cache=%s scans=%s tickets=%s duration_ms=%.2f",
+            request_id,
+            request.user.pk,
+            days,
+            cache_status,
+            data["totals"]["scans"],
+            data["totals"]["tickets"],
+            duration_ms,
+        )
         return api_response(True, "Dashboard summary", data)
-
-
-

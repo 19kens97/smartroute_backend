@@ -1,3 +1,4 @@
+import logging
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.viewsets import ModelViewSet
@@ -7,6 +8,8 @@ from .models import Ticket
 from .permissions import TicketPermission
 from .serializers import TicketProofSerializer, TicketSerializer
 from .services import generate_ticket_barcode
+
+logger = logging.getLogger(__name__)
 
 class TicketViewSet(ModelViewSet):
     queryset = Ticket.objects.select_related("agent", "vehicle").prefetch_related("ticket_infractions", "proofs").all().order_by("-id")
@@ -28,6 +31,7 @@ class TicketViewSet(ModelViewSet):
         ticket = serializer.save()
         action = "STATUS_CHANGE" if before != ticket.status else "UPDATE"
         log_action(self.request.user, ticket, action, {"from": before, "to": ticket.status})
+        logger.info("event=ticket_updated request_id=%s ticket_id=%s user_id=%s action=%s from_status=%s to_status=%s", getattr(self.request, "request_id", "-"), ticket.pk, self.request.user.pk, action, before, ticket.status)
         if ticket.vehicle_id:
             from apps.alerts.services import evaluate_judicial_alert
             evaluate_judicial_alert(vehicle=ticket.vehicle, actor=self.request.user)
@@ -39,3 +43,4 @@ class TicketViewSet(ModelViewSet):
         serializer.is_valid(raise_exception=True)
         proof = serializer.save(ticket=ticket)
         return api_response(True, "Proof added", TicketProofSerializer(proof).data)
+

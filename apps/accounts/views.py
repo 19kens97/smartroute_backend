@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import io
 import json
 
@@ -12,7 +13,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenBlacklistView
 from apps.core.api import api_response
-from .serializers import UserSerializer
+from .serializers import PasswordChangeSerializer, ProfileUpdateSerializer, UserSerializer
+
+logger = logging.getLogger(__name__)
 
 SIGNATURE_MAX_BYTES = 1024 * 1024
 SIGNATURE_ALLOWED_FORMATS = {"PNG", "JPEG"}
@@ -121,9 +124,42 @@ def _signature_error_response(code):
 
 
 class MeView(APIView):
-    permission_classes=[IsAuthenticated]
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         return api_response(True, "Profile loaded", UserSerializer(request.user).data)
+
+    def patch(self, request):
+        serializer = ProfileUpdateSerializer(instance=request.user, data=request.data, partial=True, context={"request": request})
+        if not serializer.is_valid():
+            logger.warning("event=profile_update_rejected request_id=%s user_id=%s fields=%s", getattr(request, "request_id", "-"), request.user.pk, sorted(request.data.keys()))
+            return api_response(False, "Impossible de modifier le profil.", {}, serializer.errors, status.HTTP_400_BAD_REQUEST)
+        user = serializer.save()
+        try:
+            from apps.core.services import log_action
+            log_action(request.user, user, "UPDATE_PROFILE", {"fields": sorted(serializer.validated_data.keys())})
+        except Exception:
+            pass
+        logger.info("event=profile_updated request_id=%s user_id=%s fields=%s", getattr(request, "request_id", "-"), request.user.pk, sorted(serializer.validated_data.keys()))
+        return api_response(True, "Profil mis a jour.", UserSerializer(user).data)
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = PasswordChangeSerializer(data=request.data, context={"request": request})
+        if not serializer.is_valid():
+            logger.warning("event=password_change_rejected request_id=%s user_id=%s error_fields=%s", getattr(request, "request_id", "-"), request.user.pk, sorted(serializer.errors.keys()))
+            return api_response(False, "Impossible de modifier le mot de passe.", {}, serializer.errors, status.HTTP_400_BAD_REQUEST)
+        user = serializer.save()
+        try:
+            from apps.core.services import log_action
+            log_action(request.user, user, "CHANGE_PASSWORD")
+        except Exception:
+            pass
+        logger.info("event=password_changed request_id=%s user_id=%s", getattr(request, "request_id", "-"), request.user.pk)
+        return api_response(True, "Votre mot de passe a ete modifie avec succes.", {})
 
 
 class ProfileSignatureView(APIView):
@@ -141,11 +177,13 @@ class ProfileSignatureView(APIView):
             try:
                 png = _png_from_uploaded_signature(uploaded)
             except ValueError as exc:
+                logger.warning("event=signature_upload_rejected request_id=%s user_id=%s reason=%s", getattr(request, "request_id", "-"), request.user.pk, str(exc))
                 return _signature_error_response(str(exc))
         elif payload:
             try:
                 png = _png_from_strokes_payload(payload)
             except ValueError as exc:
+                logger.warning("event=signature_payload_rejected request_id=%s user_id=%s reason=%s", getattr(request, "request_id", "-"), request.user.pk, str(exc))
                 return _signature_error_response(str(exc))
         else:
             return _signature_error_response("MISSING_SIGNATURE")
@@ -163,6 +201,7 @@ class ProfileSignatureView(APIView):
         if old_signature_name and old_signature_name != user.signature_file.name:
             user.signature_file.storage.delete(old_signature_name)
 
+        logger.info("event=signature_saved request_id=%s user_id=%s sha256_prefix=%s", getattr(request, "request_id", "-"), request.user.pk, signature_hash[:12])
         return api_response(True, "Signature saved", _signature_status(user))
 
     def delete(self, request):
@@ -174,14 +213,29 @@ class ProfileSignatureView(APIView):
         user.save(update_fields=["signature_file", "signature_sha256", "signature_updated_at"])
         if old_signature_name:
             user.signature_file.storage.delete(old_signature_name)
+        logger.info("event=signature_deleted request_id=%s user_id=%s", getattr(request, "request_id", "-"), request.user.pk)
         return api_response(True, "Signature deleted", _signature_status(user))
 
 
 class SmartTokenObtainPairView(TokenObtainPairView):
-    pass
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        log_method = logger.info if response.status_code < 400 else logger.warning
+        log_method("event=auth_login_completed request_id=%s status=%s", getattr(request, "request_id", "-"), response.status_code)
+        return response
 
 class SmartTokenRefreshView(TokenRefreshView):
-    pass
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        log_method = logger.info if response.status_code < 400 else logger.warning
+        log_method("event=auth_refresh_completed request_id=%s status=%s", getattr(request, "request_id", "-"), response.status_code)
+        return response
 
 class SmartTokenBlacklistView(TokenBlacklistView):
-    pass
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        logger.info("event=auth_logout_completed request_id=%s user_id=%s status=%s", getattr(request, "request_id", "-"), getattr(request.user, "pk", None), response.status_code)
+        return response
+
+
+

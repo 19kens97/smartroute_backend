@@ -2,9 +2,21 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APITestCase
 from unittest.mock import patch, MagicMock
+from django.urls import resolve, Resolver404
+
+SCAN_PLATE_PATH = "/api/scans/scan-plate/"
+LEGACY_GEMINI_SCAN_PLATE_PATH = "/api/gemini/scan-plate/"
 
 
 class GeminiScanAPITests(APITestCase):
+    def test_scan_plate_routes_resolve(self):
+        self.assertIsNotNone(resolve(SCAN_PLATE_PATH).func)
+        self.assertIsNotNone(resolve(LEGACY_GEMINI_SCAN_PLATE_PATH).func)
+        with self.assertRaises(Resolver404):
+            resolve("/api/scans/gemini/scan-plate/")
+        with self.assertRaises(Resolver404):
+            resolve("/api/scan-plate/")
+
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_user(username="tester", password="pass")
@@ -20,14 +32,14 @@ class GeminiScanAPITests(APITestCase):
         mock_client_class.return_value = mock_client
 
         image = SimpleUploadedFile("plate.jpg", b"\xff\xd8\xff", content_type="image/jpeg")
-        resp = self.client.post("/api/gemini/scan-plate/", {"image": image}, format="multipart")
+        resp = self.client.post(SCAN_PLATE_PATH, {"image": image}, format="multipart")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data.get("status"), "success")
         self.assertIn("plate_number", data)
 
     def test_scan_plate_no_image(self):
-        resp = self.client.post("/api/gemini/scan-plate/", {})
+        resp = self.client.post(SCAN_PLATE_PATH, {})
         self.assertEqual(resp.status_code, 400)
         data = resp.json()
         self.assertEqual(data.get("status"), "error")
@@ -45,7 +57,7 @@ class GeminiScanAPITests(APITestCase):
 
         image = SimpleUploadedFile("plate.jpg", b"\xff\xd8\xff", content_type="image/jpeg")
         with patch("django.conf.settings.GEMINI_FALLBACK_MODELS", ["gemini-2.5-mini"]):
-            resp = self.client.post("/api/gemini/scan-plate/", {"image": image}, format="multipart")
+            resp = self.client.post(SCAN_PLATE_PATH, {"image": image}, format="multipart")
 
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
@@ -63,7 +75,7 @@ class GeminiScanAPITests(APITestCase):
         mock_client_class.return_value = mock_client
 
         image = SimpleUploadedFile("plate.jpg", b"\xff\xd8\xff", content_type="image/jpeg")
-        resp = self.client.post("/api/gemini/scan-plate/", {"image": image}, format="multipart")
+        resp = self.client.post(SCAN_PLATE_PATH, {"image": image}, format="multipart")
         self.assertEqual(resp.status_code, 200)
 
         scan = GeminiScan.objects.first()
@@ -85,7 +97,7 @@ class GeminiScanAPITests(APITestCase):
         mock_client_class.return_value = mock_client
 
         image = SimpleUploadedFile("plate.jpg", b"\xff\xd8\xff", content_type="image/jpeg")
-        resp = self.client.post("/api/gemini/scan-plate/", {"image": image}, format="multipart")
+        resp = self.client.post(SCAN_PLATE_PATH, {"image": image}, format="multipart")
         self.assertEqual(resp.status_code, 200)
 
         data = resp.json()
@@ -151,7 +163,7 @@ class GeminiScanAPITests(APITestCase):
         mock_client_class.return_value = mock_client
 
         image = SimpleUploadedFile("plate.jpg", b"\xff\xd8\xff", content_type="image/jpeg")
-        resp = self.client.post("/api/gemini/scan-plate/", {"image": image}, format="multipart")
+        resp = self.client.post(SCAN_PLATE_PATH, {"image": image}, format="multipart")
 
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
@@ -197,7 +209,7 @@ class GeminiScanAPITests(APITestCase):
         self.client.force_authenticate(user=None)
 
         image = SimpleUploadedFile("plate.jpg", b"\xff\xd8\xff", content_type="image/jpeg")
-        scan = self.client.post("/api/gemini/scan-plate/", {"image": image}, format="multipart")
+        scan = self.client.post(SCAN_PLATE_PATH, {"image": image}, format="multipart")
         search = self.client.get("/api/scans/search/?plate_number=AA12345")
 
         self.assertEqual(scan.status_code, 401)

@@ -1,3 +1,4 @@
+import logging
 from django.db import transaction
 from django.db.models import Exists, OuterRef
 from django.http import FileResponse, Http404
@@ -14,7 +15,10 @@ from .filters import AlertFilter
 from .models import Alert, AlertReceipt
 from .pagination import AlertPagination
 from .permissions import AlertPermission
+from .realtime import broadcast_alert_created
 from .serializers import AlertListSerializer, AlertSerializer
+
+logger = logging.getLogger(__name__)
 
 
 @extend_schema_view(
@@ -77,6 +81,11 @@ class AlertViewSet(ModelViewSet):
                 evidence_file_names = [item.file.name for item in alert.evidence.all() if item.file]
                 AlertReceipt.objects.create(alert=alert, user=self.request.user, opened_at=timezone.now())
                 log_action(self.request.user, alert, "CREATE")
+                transaction.on_commit(
+                    lambda alert_id=alert.pk: broadcast_alert_created(
+                        Alert.objects.select_related("created_by").get(pk=alert_id)
+                    )
+                )
         except Exception:
             storage = None
             for file_name in evidence_file_names:
@@ -137,3 +146,4 @@ class AlertViewSet(ModelViewSet):
         response["Cache-Control"] = "private, no-store"
         response["Content-Disposition"] = f'inline; filename="alert-evidence-{evidence.pk}"'
         return response
+

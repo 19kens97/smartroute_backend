@@ -51,6 +51,13 @@ def is_usable_plate(plate: str) -> bool:
     return has_letter and has_digit
 
 
+def mask_plate_for_log(plate: str) -> str:
+    if not plate:
+        return ""
+    text = str(plate)
+    return f"{text[:2]}***{text[-2:]}" if len(text) > 4 else "<masked>"
+
+
 def format_plate_display(plate: str) -> str:
     normalized = normalize_plate_candidate(plate)
     if len(normalized) <= 5:
@@ -269,6 +276,7 @@ def extract_license_plate(request):
             from google.genai import types
 
             image_file = request.FILES["image"]
+            logger.info("event=gemini_scan_started request_id=%s user_id=%s filename=%s content_type=%s", getattr(request, "request_id", "-"), request.user.pk, getattr(image_file, "name", ""), getattr(image_file, "content_type", ""))
             image_bytes = image_file.read()
 
             prompt = (
@@ -287,6 +295,7 @@ def extract_license_plate(request):
             _response, model_used, plate_number, raw_text = generate_with_fallbacks(contents)
             plate_number_display = format_plate_display(plate_number) if plate_number else ""
             vehicle = get_vehicle_by_plate(plate_number_display) if plate_number_display else None
+            logger.info("event=gemini_plate_detected request_id=%s user_id=%s plate=%s model=%s vehicle_id=%s", getattr(request, "request_id", "-"), request.user.pk, mask_plate_for_log(plate_number_display), model_used, getattr(vehicle, "pk", None))
             evaluate_vehicle_alert(vehicle, request.user)
             scan_entry = None
             try:
@@ -298,6 +307,7 @@ def extract_license_plate(request):
                     vehicle=vehicle,
                     agent=request.user,
                 )
+                logger.info("event=gemini_scan_saved request_id=%s scan_id=%s user_id=%s plate=%s vehicle_id=%s", getattr(request, "request_id", "-"), scan_entry.pk, request.user.pk, mask_plate_for_log(plate_number_display), getattr(vehicle, "pk", None))
             except Exception:
                 logger.exception("Impossible d'enregistrer le scan Gemini en base.")
 
@@ -416,7 +426,8 @@ def search_plate(request):
     evaluate_vehicle_alert(vehicle, request.user)
 
     try:
-        Scan.objects.create(agent=request.user, plate_number=plate_number_display, source="MANUAL")
+        scan = Scan.objects.create(agent=request.user, plate_number=plate_number_display, source="MANUAL")
+        logger.info("event=manual_plate_search_saved request_id=%s scan_id=%s user_id=%s plate=%s vehicle_id=%s", getattr(request, "request_id", "-"), scan.pk, request.user.pk, mask_plate_for_log(plate_number_display), getattr(vehicle, "pk", None))
     except Exception:
         logger.exception("Impossible d'enregistrer la recherche manuelle en base.")
 
@@ -431,3 +442,6 @@ def search_plate(request):
             "tickets": build_vehicle_tickets_payload(vehicle) if vehicle else {"summary": {"total": 0, "en_cours": 0, "regle": 0}, "items": []},
         }
     )
+
+
+

@@ -1,4 +1,4 @@
-﻿from datetime import timedelta
+from datetime import timedelta
 from pathlib import Path
 from decouple import config
 
@@ -9,6 +9,7 @@ DEBUG = DEBUG_RAW in {"1", "true", "yes", "on", "dev", "development"}
 ALLOWED_HOSTS = [h.strip() for h in config("ALLOWED_HOSTS", default="127.0.0.1,localhost").split(",") if h.strip()]
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -16,6 +17,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "corsheaders",
+    "channels",
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
     "drf_spectacular",
@@ -44,12 +46,14 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.core.middleware.APIResponseLoggingMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
 AUTH_USER_MODEL = "accounts.User"
 
 TEMPLATES = [{
@@ -84,6 +88,10 @@ GEMINI_FALLBACK_MODELS = [m.strip() for m in config("GEMINI_FALLBACK_MODELS", de
 GEMINI_LOG_RESPONSE = config("GEMINI_LOG_RESPONSE", cast=bool, default=False)
 GEMINI_LOG_RAW_RESPONSE = config("GEMINI_LOG_RAW_RESPONSE", cast=bool, default=False)
 ENABLE_RECOGNIZE_ENDPOINT = config("ENABLE_RECOGNIZE_ENDPOINT", cast=bool, default=False)
+API_RESPONSE_LOGGING_ENABLED = config("API_RESPONSE_LOGGING_ENABLED", cast=bool, default=True)
+API_RESPONSE_LOGGING_PATH_PREFIX = config("API_RESPONSE_LOGGING_PATH_PREFIX", default="/api/")
+API_RESPONSE_LOGGING_MAX_CHARS = config("API_RESPONSE_LOGGING_MAX_CHARS", cast=int, default=4000)
+API_RESPONSE_LOGGING_INCLUDE_BODY = config("API_RESPONSE_LOGGING_INCLUDE_BODY", cast=bool, default=True)
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
@@ -122,6 +130,20 @@ CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND", default="redis://127.0.0
 if USE_CELERY:
     INSTALLED_APPS += ["django_celery_beat", "django_celery_results"]
 
+if USE_REDIS:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [REDIS_URL]},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
+
 SECURE_UPLOAD_MAX_MB = 5
 ALLOWED_UPLOAD_EXTENSIONS = [".jpg", ".jpeg", ".png", ".pdf"]
 ALERT_EVIDENCE_AUDIO_MAX_MB = 10
@@ -132,3 +154,51 @@ ALERT_EVIDENCE_ALLOWED_AUDIO_MIME_TYPES = ["audio/m4a", "audio/mp4", "audio/aac"
 ALERT_EVIDENCE_ALLOWED_VIDEO_MIME_TYPES = ["video/mp4", "video/quicktime"]
 ALERT_EVIDENCE_ALLOWED_AUDIO_EXTENSIONS = [".m4a", ".mp4", ".aac", ".mp3"]
 ALERT_EVIDENCE_ALLOWED_VIDEO_EXTENSIONS = [".mp4", ".mov"]
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "structured": {
+            "format": "{asctime} | {levelname} | {name} | {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "structured",
+            "level": "INFO",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.server": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "apps": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "apps.http": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}

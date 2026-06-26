@@ -140,3 +140,115 @@ class ProfileSignatureTests(APITestCase):
         self.assertEqual(delete_response.status_code, 200)
         self.user.refresh_from_db()
         self.assertFalse(self.user.signature_file)
+
+
+class ProfileContactAndPasswordTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="profile_agent",
+            password="OldPass123!",
+            email="agent@example.com",
+            first_name="Jean",
+            last_name="Agent",
+            phone="+50937000000",
+            role="AGENT_TERRAIN",
+            badge_number="AGT-100",
+        )
+        self.other = User.objects.create_user(username="other_agent", password="pass", email="used@example.com")
+        self.client = APIClient()
+
+    def authenticate(self):
+        self.client.force_authenticate(user=self.user)
+
+    def test_patch_me_updates_phone_and_normalizes(self):
+        self.authenticate()
+        response = self.client.patch("/api/auth/me/", {"phone": "509 3712-3456"}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone, "+50937123456")
+        self.assertEqual(response.data["data"]["phone"], "+50937123456")
+        self.assertEqual(self.user.email, "agent@example.com")
+
+    def test_patch_me_rejects_invalid_phone_and_blank_email(self):
+        self.authenticate()
+        bad_phone = self.client.patch("/api/auth/me/", {"phone": "123"}, format="json")
+        self.assertEqual(bad_phone.status_code, 400)
+        self.assertIn("phone", bad_phone.data["errors"])
+
+        blank_email = self.client.patch("/api/auth/me/", {"email": ""}, format="json")
+        self.assertEqual(blank_email.status_code, 400)
+        self.assertIn("email", blank_email.data["errors"])
+
+    def test_patch_me_updates_email_normalizes_and_rejects_duplicate(self):
+        self.authenticate()
+        response = self.client.patch("/api/auth/me/", {"email": "  NEW@EXAMPLE.COM  "}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, "new@example.com")
+        self.assertEqual(self.user.phone, "+50937000000")
+
+        duplicate = self.client.patch("/api/auth/me/", {"email": "used@example.com"}, format="json")
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertEqual(duplicate.data["errors"]["email"][0], "Cette adresse e-mail est deja utilisee.")
+
+    def test_patch_me_requires_auth_and_ignores_forbidden_fields(self):
+        anonymous = self.client.patch("/api/auth/me/", {"phone": "+50937123456"}, format="json")
+        self.assertEqual(anonymous.status_code, 401)
+
+        self.authenticate()
+        response = self.client.patch(
+            "/api/auth/me/",
+            {"phone": "+50937123456", "role": "ADMIN", "badge_number": "ROOT"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone, "+50937123456")
+        self.assertEqual(self.user.role, "AGENT_TERRAIN")
+        self.assertEqual(self.user.badge_number, "AGT-100")
+
+    def test_change_password_requires_auth_and_rejects_bad_old_password(self):
+        anonymous = self.client.post("/api/auth/change-password/", {}, format="json")
+        self.assertEqual(anonymous.status_code, 401)
+
+        self.authenticate()
+        response = self.client.post(
+            "/api/auth/change-password/",
+            {"old_password": "wrong", "new_password": "NewPass123!", "confirm_password": "NewPass123!"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("old_password", response.data["errors"])
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("OldPass123!"))
+
+    def test_change_password_rejects_confirmation_mismatch_and_same_password(self):
+        self.authenticate()
+        mismatch = self.client.post(
+            "/api/auth/change-password/",
+            {"old_password": "OldPass123!", "new_password": "NewPass123!", "confirm_password": "OtherPass123!"},
+            format="json",
+        )
+        self.assertEqual(mismatch.status_code, 400)
+        self.assertIn("confirm_password", mismatch.data["errors"])
+
+        same = self.client.post(
+            "/api/auth/change-password/",
+            {"old_password": "OldPass123!", "new_password": "OldPass123!", "confirm_password": "OldPass123!"},
+            format="json",
+        )
+        self.assertEqual(same.status_code, 400)
+        self.assertIn("new_password", same.data["errors"])
+
+    def test_change_password_success_uses_set_password(self):
+        self.authenticate()
+        response = self.client.post(
+            "/api/auth/change-password/",
+            {"old_password": "OldPass123!", "new_password": "NewPass123!", "confirm_password": "NewPass123!"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn("new_password", str(response.data))
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.check_password("OldPass123!"))
+        self.assertTrue(self.user.check_password("NewPass123!"))

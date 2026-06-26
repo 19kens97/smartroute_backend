@@ -744,3 +744,118 @@ class AlertHistoryListApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertLessEqual(len(context), 4)
+
+@override_settings(
+    ALLOWED_HOSTS=["testserver", "localhost", "127.0.0.1"],
+    CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}},
+)
+class AlertRealtimeTests(APITestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.creator = User.objects.create_user(username="ws_creator", password="Pass1234!", role="AGENT_TERRAIN")
+        self.reader = User.objects.create_user(username="ws_reader", password="Pass1234!", role="AGENT_SAISIE")
+        self.inactive = User.objects.create_user(username="ws_inactive", password="Pass1234!", role="AGENT_SAISIE", is_active=False)
+
+    def token_for(self, user):
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        return str(AccessToken.for_user(user))
+
+    def communicator_for(self, user=None, token="__missing__"):
+        from channels.testing import WebsocketCommunicator
+        from config.asgi import application
+
+        if token == "__missing__":
+            token = self.token_for(user)
+        query = f"?token={token}" if token else ""
+        return WebsocketCommunicator(
+            application,
+            f"/ws/alerts/{query}",
+            headers=[(b"origin", b"http://testserver")],
+        )
+
+    def connect(self, communicator):
+        from asgiref.sync import async_to_sync
+
+        return async_to_sync(communicator.connect)()
+
+    def disconnect(self, communicator):
+        from asgiref.sync import async_to_sync
+
+        try:
+            async_to_sync(communicator.disconnect)()
+        except BaseException:
+            pass
+
+    def test_websocket_accepts_authenticated_user(self):
+        communicator = self.communicator_for(self.reader)
+        connected, _ = self.connect(communicator)
+        self.assertTrue(connected)
+        self.disconnect(communicator)
+
+    def test_websocket_rejects_missing_invalid_and_inactive_token(self):
+        for communicator in (
+            self.communicator_for(token=""),
+            self.communicator_for(token="invalid-token"),
+            self.communicator_for(self.inactive),
+        ):
+            connected, _ = self.connect(communicator)
+            self.assertFalse(connected)
+
+    def test_recipient_service_excludes_creator_inactive_and_system_alerts(self):
+        from .realtime import get_alert_recipient_users
+
+        alert = Alert.objects.create(
+            created_by=self.creator,
+            alert_type=Alert.TYPE_FIELD_ESCAPE,
+            description="Le conducteur a pris la fuite pendant le controle.",
+        )
+        recipients = get_alert_recipient_users(alert, self.creator)
+        self.assertIn(self.reader, recipients)
+        self.assertNotIn(self.creator, recipients)
+        self.assertNotIn(self.inactive, recipients)
+
+        system_alert = Alert.objects.create(
+            alert_type=Alert.TYPE_JUDICIAL,
+            source=Alert.SOURCE_SYSTEM,
+            description="Alerte automatique contextuelle.",
+            deduplication_key="JUDICIAL:WS-TEST",
+        )
+        self.assertEqual(get_alert_recipient_users(system_alert).count(), 0)
+
+    def test_alert_created_event_contract_has_safe_summary(self):
+        from .realtime import build_alert_created_event
+
+        alert = Alert.objects.create(
+            created_by=self.creator,
+            alert_type=Alert.TYPE_REFUSED_CONTROL,
+            plate_number="HT-404",
+            description="Le conducteur refuse le controle routier avec une description suffisamment precise.",
+        )
+        event = build_alert_created_event(alert)
+        self.assertEqual(event["type"], "alert.created")
+        self.assertEqual(event["version"], 1)
+        self.assertEqual(event["data"]["id"], alert.id)
+        self.assertEqual(event["data"]["alert_type"], Alert.TYPE_REFUSED_CONTROL)
+        self.assertEqual(event["data"]["plate_number"], "HT-404")
+        self.assertEqual(event["data"]["source"], Alert.SOURCE_MANUAL)
+        self.assertIn("description_preview", event["data"])
+        self.assertNotIn("token", str(event).lower())
+        self.assertNotIn("subject_nif", event["data"])
+
+    def test_rest_alert_creation_schedules_broadcast_after_commit(self):
+        from unittest.mock import patch
+
+        self.client.force_authenticate(user=self.creator)
+        with patch("apps.alerts.views.broadcast_alert_created") as broadcast:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post(
+                    "/api/alerts/",
+                    {"alert_type": Alert.TYPE_FIELD_ESCAPE, "description": "Le conducteur a pris la fuite pendant le controle."},
+                    format="json",
+                )
+        self.assertEqual(response.status_code, 201, response.data)
+        broadcast.assert_called_once()
+        broadcasted_alert = broadcast.call_args.args[0]
+        self.assertEqual(broadcasted_alert.pk, response.data["id"])
+        self.assertEqual(broadcasted_alert.created_by, self.creator)

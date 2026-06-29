@@ -79,7 +79,16 @@ class APIResponseLoggingMiddleware:
 
     def get_user_id(self, request):
         user = getattr(request, "user", None)
-        return getattr(user, "pk", None) if getattr(user, "is_authenticated", False) else None
+        if getattr(user, "is_authenticated", False):
+            return getattr(user, "pk", None)
+        try:
+            authenticated = JWTAuthentication().authenticate(request)
+        except Exception:
+            return None
+        if not authenticated:
+            return None
+        auth_user, _token = authenticated
+        return getattr(auth_user, "pk", None) if getattr(auth_user, "is_authenticated", False) else None
 
     def log_request_started(self, request, request_id):
         logger.info(

@@ -793,14 +793,29 @@ class AlertRealtimeTests(APITestCase):
         self.assertTrue(connected)
         self.disconnect(communicator)
 
-    def test_websocket_rejects_missing_invalid_and_inactive_token(self):
+    def expired_token(self):
+        from datetime import timedelta
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        token = AccessToken.for_user(self.reader)
+        token.set_exp(lifetime=timedelta(seconds=-1))
+        return str(token)
+
+    def test_websocket_rejects_missing_invalid_and_expired_token_with_4401(self):
         for communicator in (
             self.communicator_for(token=""),
             self.communicator_for(token="invalid-token"),
-            self.communicator_for(self.inactive),
+            self.communicator_for(token=self.expired_token()),
         ):
-            connected, _ = self.connect(communicator)
+            connected, close_code = self.connect(communicator)
             self.assertFalse(connected)
+            self.assertEqual(close_code, 4401)
+
+    def test_websocket_rejects_inactive_user_with_4403(self):
+        communicator = self.communicator_for(self.inactive)
+        connected, close_code = self.connect(communicator)
+        self.assertFalse(connected)
+        self.assertEqual(close_code, 4403)
 
     def test_recipient_service_excludes_creator_inactive_and_system_alerts(self):
         from .realtime import get_alert_recipient_users

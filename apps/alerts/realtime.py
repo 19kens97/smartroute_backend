@@ -1,3 +1,5 @@
+import logging
+
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.contrib.auth import get_user_model
@@ -5,6 +7,8 @@ from django.contrib.auth import get_user_model
 from .consumers import user_alert_group
 from .models import Alert
 from .serializers import ALERT_SEVERITIES, ALERT_TYPE_LABELS
+
+logger = logging.getLogger(__name__)
 
 
 def get_alert_recipient_users(alert, creator=None):
@@ -43,15 +47,19 @@ def build_alert_created_event(alert):
 
 def broadcast_alert_created(alert):
     recipients = get_alert_recipient_users(alert, alert.created_by)
-    if not recipients.exists():
+    recipient_ids = list(recipients.values_list("id", flat=True))
+    if not recipient_ids:
+        logger.info("event=alert_event_skipped alert_id=%s recipient_count=0", alert.pk)
         return
 
     channel_layer = get_channel_layer()
     if channel_layer is None:
+        logger.info("event=alert_event_skipped alert_id=%s reason=no_channel_layer", alert.pk)
         return
 
     payload = build_alert_created_event(alert)
-    for user_id in recipients.values_list("id", flat=True):
+    logger.info("event=alert_event_broadcast alert_id=%s recipient_count=%s", alert.pk, len(recipient_ids))
+    for user_id in recipient_ids:
         async_to_sync(channel_layer.group_send)(
             user_alert_group(user_id),
             {"type": "alert.created", "payload": payload},

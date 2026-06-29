@@ -26,6 +26,19 @@ class TicketInfraction(models.Model):
     amount_snapshot = models.DecimalField(max_digits=10, decimal_places=2)
 
 class TicketProof(TimeStampedModel):
+    EVIDENCE_PHOTO = "PHOTO"
+    EVIDENCE_VIDEO = "VIDEO"
+    EVIDENCE_AUDIO = "AUDIO"
+    EVIDENCE_TYPE_CHOICES = [
+        (EVIDENCE_PHOTO, "Photo"),
+        (EVIDENCE_VIDEO, "Video"),
+        (EVIDENCE_AUDIO, "Audio"),
+    ]
+
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="proofs")
     file = models.FileField(upload_to=proof_upload_path)
+    evidence_type = models.CharField(max_length=10, choices=EVIDENCE_TYPE_CHOICES, default=EVIDENCE_PHOTO)
+    mime_type = models.CharField(max_length=120, blank=True)
+    duration_seconds = models.PositiveIntegerField(null=True, blank=True)
     caption = models.CharField(max_length=200, blank=True)
+

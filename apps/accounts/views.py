@@ -173,6 +173,14 @@ class ProfileSignatureView(APIView):
         uploaded = request.FILES.get("signature")
         payload = request.data.get("signature_payload")
 
+        logger.info(
+            "event=media_upload_started request_id=%s user_id=%s media_context=agent_signature has_file=%s has_payload=%s",
+            getattr(request, "request_id", "-"),
+            request.user.pk,
+            bool(uploaded),
+            bool(payload),
+        )
+
         if uploaded:
             try:
                 png = _png_from_uploaded_signature(uploaded)
@@ -201,6 +209,7 @@ class ProfileSignatureView(APIView):
         if old_signature_name and old_signature_name != user.signature_file.name:
             user.signature_file.storage.delete(old_signature_name)
 
+        logger.info("event=media_saved request_id=%s user_id=%s media_context=agent_signature sha256_prefix=%s", getattr(request, "request_id", "-"), request.user.pk, signature_hash[:12])
         logger.info("event=signature_saved request_id=%s user_id=%s sha256_prefix=%s", getattr(request, "request_id", "-"), request.user.pk, signature_hash[:12])
         return api_response(True, "Signature saved", _signature_status(user))
 
@@ -213,6 +222,7 @@ class ProfileSignatureView(APIView):
         user.save(update_fields=["signature_file", "signature_sha256", "signature_updated_at"])
         if old_signature_name:
             user.signature_file.storage.delete(old_signature_name)
+        logger.info("event=media_deleted request_id=%s user_id=%s media_context=agent_signature", getattr(request, "request_id", "-"), request.user.pk)
         logger.info("event=signature_deleted request_id=%s user_id=%s", getattr(request, "request_id", "-"), request.user.pk)
         return api_response(True, "Signature deleted", _signature_status(user))
 

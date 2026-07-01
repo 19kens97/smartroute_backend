@@ -1,25 +1,11 @@
-﻿import uuid
-from pathlib import Path
-
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
 from django.db import models
-from django.utils import timezone
 from django.utils.deconstruct import deconstructible
 
 from apps.core.models import TimeStampedModel
+from apps.media_storage.services import alert_evidence_upload_path
 from apps.vehicles.models import normalize_plate_number
-
-
-def alert_evidence_upload_path(instance, filename):
-    extension = Path(filename or "").suffix.lower()
-    allowed_extensions = set(getattr(settings, "ALERT_EVIDENCE_ALLOWED_AUDIO_EXTENSIONS", [])) | set(
-        getattr(settings, "ALERT_EVIDENCE_ALLOWED_VIDEO_EXTENSIONS", [])
-    )
-    if extension not in allowed_extensions:
-        extension = ".bin"
-    now = timezone.now()
-    return f"alerts/{instance.alert_id}/{now:%Y}/{now:%m}/{uuid.uuid4()}{extension}"
 
 
 @deconstructible
@@ -85,6 +71,7 @@ class AlertEvidence(TimeStampedModel):
     file = models.FileField(upload_to=alert_evidence_upload_path, storage=private_alert_evidence_storage)
     mime_type = models.CharField(max_length=100, blank=True)
     size_bytes = models.PositiveBigIntegerField(null=True, blank=True)
+    checksum_sha256 = models.CharField(max_length=64, blank=True)
     duration_seconds = models.PositiveIntegerField(null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

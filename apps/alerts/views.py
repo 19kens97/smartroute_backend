@@ -75,10 +75,25 @@ class AlertViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         evidence_file_names = []
+        logger.info(
+            "event=media_upload_started request_id=%s user_id=%s media_context=alert_evidence has_file=%s",
+            getattr(self.request, "request_id", "-"),
+            self.request.user.pk,
+            "evidence_file" in self.request.FILES,
+        )
         try:
             with transaction.atomic():
                 alert = serializer.save(created_by=self.request.user, source=Alert.SOURCE_MANUAL)
                 evidence_file_names = [item.file.name for item in alert.evidence.all() if item.file]
+                for evidence in alert.evidence.all():
+                    logger.info(
+                        "event=media_saved request_id=%s alert_id=%s evidence_id=%s user_id=%s evidence_type=%s status=saved",
+                        getattr(self.request, "request_id", "-"),
+                        alert.pk,
+                        evidence.pk,
+                        self.request.user.pk,
+                        evidence.evidence_type,
+                    )
                 AlertReceipt.objects.create(alert=alert, user=self.request.user, opened_at=timezone.now())
                 log_action(self.request.user, alert, "CREATE")
                 transaction.on_commit(
@@ -143,6 +158,13 @@ class AlertViewSet(ModelViewSet):
         if evidence is None or not evidence.file:
             raise Http404
         response = FileResponse(evidence.file.open("rb"), content_type=evidence.mime_type or "application/octet-stream")
+        logger.info(
+            "event=media_downloaded request_id=%s alert_id=%s evidence_id=%s user_id=%s media_context=alert_evidence",
+            getattr(request, "request_id", "-"),
+            alert.pk,
+            evidence.pk,
+            request.user.pk,
+        )
         response["Cache-Control"] = "private, no-store"
         response["Content-Disposition"] = f'inline; filename="alert-evidence-{evidence.pk}"'
         return response

@@ -12,8 +12,10 @@ from google.genai import errors as genai_errors
 from google.genai import types
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from rest_framework import serializers
 
 from apps.core.cache import invalidate_statistics_cache
+from apps.media_storage.services import MEDIA_TYPE_IMAGE, get_image_limits, validate_uploaded_media
 from apps.scans.models import GeminiScan, Scan
 
 logger = logging.getLogger(__name__)
@@ -258,12 +260,13 @@ def extract_license_plate(request):
 
     try:
         logger.info(
-            "event=gemini_scan_started request_id=%s user_id=%s filename=%s content_type=%s",
+            "event=media_upload_started request_id=%s user_id=%s media_context=plate_scan filename=%s content_type=%s",
             getattr(request, "request_id", "-"),
             request.user.pk,
             getattr(image_file, "name", ""),
             getattr(image_file, "content_type", ""),
         )
+        validate_uploaded_media(image_file, media_type=MEDIA_TYPE_IMAGE, field_name="image", **get_image_limits())
         image_bytes = image_file.read()
         if not image_bytes:
             return JsonResponse({"status": "error", "message": "Le fichier image est vide."}, status=400)
@@ -330,6 +333,8 @@ def extract_license_plate(request):
             }
         )
 
+    except serializers.ValidationError as e:
+        return JsonResponse({"status": "error", "message": e.detail}, status=400)
     except ValueError as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=422)
     except exceptions.InvalidArgument:

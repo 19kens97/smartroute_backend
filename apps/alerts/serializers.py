@@ -1,9 +1,13 @@
-from pathlib import Path
-
-from django.conf import settings
 from django.db import transaction
 from rest_framework import serializers
 
+from apps.media_storage.services import (
+    MEDIA_TYPE_AUDIO,
+    MEDIA_TYPE_VIDEO,
+    get_audio_limits,
+    get_video_limits,
+    validate_uploaded_media,
+)
 from apps.vehicles.models import normalize_plate_number
 from .models import Alert, AlertEvidence
 
@@ -48,6 +52,7 @@ class AlertEvidenceSerializer(serializers.ModelSerializer):
             "mime_type",
             "size_bytes",
             "duration_seconds",
+            "checksum_sha256",
             "url",
             "created_at",
         )
@@ -148,27 +153,23 @@ class AlertSerializer(AlertPresentationMixin, serializers.ModelSerializer):
         if evidence_type is None:
             raise serializers.ValidationError({"evidence_type": "Le type de preuve est requis."})
 
-        mime_type = (getattr(evidence_file, "content_type", "") or "").lower()
-        extension = Path(evidence_file.name or "").suffix.lower()
         if evidence_type == AlertEvidence.TYPE_AUDIO:
-            allowed_mime_types = set(settings.ALERT_EVIDENCE_ALLOWED_AUDIO_MIME_TYPES)
-            allowed_extensions = set(settings.ALERT_EVIDENCE_ALLOWED_AUDIO_EXTENSIONS)
-            max_size = settings.ALERT_EVIDENCE_AUDIO_MAX_MB * 1024 * 1024
-            max_duration = settings.ALERT_EVIDENCE_AUDIO_MAX_DURATION_SECONDS
+            metadata = validate_uploaded_media(
+                evidence_file,
+                media_type=MEDIA_TYPE_AUDIO,
+                duration_seconds=duration,
+                field_name="evidence_file",
+                **get_audio_limits(),
+            )
         else:
-            allowed_mime_types = set(settings.ALERT_EVIDENCE_ALLOWED_VIDEO_MIME_TYPES)
-            allowed_extensions = set(settings.ALERT_EVIDENCE_ALLOWED_VIDEO_EXTENSIONS)
-            max_size = settings.ALERT_EVIDENCE_VIDEO_MAX_MB * 1024 * 1024
-            max_duration = settings.ALERT_EVIDENCE_VIDEO_MAX_DURATION_SECONDS
-
-        if mime_type not in allowed_mime_types:
-            raise serializers.ValidationError({"evidence_file": "Type MIME de preuve non autorisé."})
-        if extension not in allowed_extensions:
-            raise serializers.ValidationError({"evidence_file": "Extension de preuve non autorisée."})
-        if evidence_file.size > max_size:
-            raise serializers.ValidationError({"evidence_file": "Le fichier de preuve est trop volumineux."})
-        if duration is not None and duration > max_duration:
-            raise serializers.ValidationError({"evidence_duration_seconds": "La durée de la preuve dépasse la limite autorisée."})
+            metadata = validate_uploaded_media(
+                evidence_file,
+                media_type=MEDIA_TYPE_VIDEO,
+                duration_seconds=duration,
+                field_name="evidence_file",
+                **get_video_limits(),
+            )
+        attrs["evidence_metadata"] = metadata
 
     def validate(self, attrs):
         request = self.context.get("request")
@@ -214,14 +215,16 @@ class AlertSerializer(AlertPresentationMixin, serializers.ModelSerializer):
         evidence_file = validated_data.pop("evidence_file", None)
         evidence_type = validated_data.pop("evidence_type", None)
         duration = validated_data.pop("evidence_duration_seconds", None)
+        evidence_metadata = validated_data.pop("evidence_metadata", {})
         alert = Alert.objects.create(**validated_data)
         if evidence_file is not None and evidence_type is not None:
             AlertEvidence.objects.create(
                 alert=alert,
                 evidence_type=evidence_type,
                 file=evidence_file,
-                mime_type=(getattr(evidence_file, "content_type", "") or ""),
-                size_bytes=getattr(evidence_file, "size", None),
+                mime_type=evidence_metadata.get("mime_type", getattr(evidence_file, "content_type", "") or ""),
+                size_bytes=evidence_metadata.get("size_bytes", getattr(evidence_file, "size", None)),
+                checksum_sha256=evidence_metadata.get("checksum_sha256", ""),
                 duration_seconds=duration,
                 created_by=validated_data["created_by"],
             )

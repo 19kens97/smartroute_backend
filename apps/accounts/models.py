@@ -1,14 +1,10 @@
-import uuid
-
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.core.files.storage import FileSystemStorage
 from django.db import models
 from django.utils.deconstruct import deconstructible
 
-
-def user_signature_upload_path(instance, filename):
-    return f"{instance.pk}/{uuid.uuid4()}.png"
+from apps.media_storage.services import user_signature_upload_path
 
 
 @deconstructible

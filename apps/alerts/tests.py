@@ -479,7 +479,8 @@ class AlertEvidenceApiTests(APITestCase):
         self.assertEqual(evidence.mime_type, "audio/mp4")
         self.assertEqual(evidence.duration_seconds, 42)
         self.assertEqual(evidence.created_by, self.field)
-        self.assertTrue(evidence.file.name.startswith(f"alerts/{evidence.alert_id}/"))
+        self.assertEqual(len(evidence.checksum_sha256), 64)
+        self.assertTrue(evidence.file.name.startswith(f"alerts/{evidence.alert_id}/audio/"))
         self.assertIn("/api/alerts/", response.data["evidence"][0]["url"])
         self.assertNotIn(self.temp_root, response.data["evidence"][0]["url"])
 

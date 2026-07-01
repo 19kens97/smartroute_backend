@@ -74,10 +74,17 @@ USE_I18N = True
 USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
-PRIVATE_SIGNATURE_ROOT = BASE_DIR / "private" / "agent-signatures"
-PRIVATE_ALERT_EVIDENCE_ROOT = BASE_DIR / "private" / "alert-evidence"
+MEDIA_STORAGE_BACKEND = config("MEDIA_STORAGE_BACKEND", default="django.core.files.storage.FileSystemStorage")
+STORAGES = {
+    "default": {"BACKEND": MEDIA_STORAGE_BACKEND},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
+MEDIA_URL = config("MEDIA_URL", default="/media/")
+MEDIA_ROOT = Path(config("MEDIA_ROOT", default=str(BASE_DIR / "media")))
+MEDIA_BASE_URL = config("MEDIA_BASE_URL", default="")
+PRIVATE_MEDIA_ENABLED = config("PRIVATE_MEDIA_ENABLED", cast=bool, default=True)
+PRIVATE_SIGNATURE_ROOT = Path(config("PRIVATE_SIGNATURE_ROOT", default=str(BASE_DIR / "private" / "agent-signatures")))
+PRIVATE_ALERT_EVIDENCE_ROOT = Path(config("PRIVATE_ALERT_EVIDENCE_ROOT", default=str(BASE_DIR / "private" / "alert-evidence")))
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = [o.strip() for o in config("CORS_ALLOWED_ORIGINS", default="").split(",") if o.strip()]
 CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", cast=bool, default=False)
@@ -162,10 +169,16 @@ else:
         }
     }
 
-SECURE_UPLOAD_MAX_MB = 5
+MAX_IMAGE_SIZE_MB = config("MAX_IMAGE_SIZE_MB", cast=int, default=5)
+MAX_VIDEO_SIZE_MB = config("MAX_VIDEO_SIZE_MB", cast=int, default=35)
+MAX_AUDIO_SIZE_MB = config("MAX_AUDIO_SIZE_MB", cast=int, default=10)
+MAX_DOCUMENT_SIZE_MB = config("MAX_DOCUMENT_SIZE_MB", cast=int, default=5)
+SECURE_UPLOAD_MAX_MB = MAX_IMAGE_SIZE_MB
 ALLOWED_UPLOAD_EXTENSIONS = [".jpg", ".jpeg", ".png", ".pdf"]
-ALERT_EVIDENCE_AUDIO_MAX_MB = 10
-ALERT_EVIDENCE_VIDEO_MAX_MB = 35
+ALLOWED_IMAGE_MIME_TYPES = ["image/jpeg", "image/png"]
+ALLOWED_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png"]
+ALERT_EVIDENCE_AUDIO_MAX_MB = MAX_AUDIO_SIZE_MB
+ALERT_EVIDENCE_VIDEO_MAX_MB = MAX_VIDEO_SIZE_MB
 ALERT_EVIDENCE_AUDIO_MAX_DURATION_SECONDS = 180
 ALERT_EVIDENCE_VIDEO_MAX_DURATION_SECONDS = 60
 ALERT_EVIDENCE_ALLOWED_AUDIO_MIME_TYPES = ["audio/m4a", "audio/mp4", "audio/aac", "audio/mpeg", "audio/x-m4a"]

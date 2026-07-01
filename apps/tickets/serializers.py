@@ -1,80 +1,80 @@
-from pathlib import Path
-
-from django.conf import settings
+﻿from django.db import IntegrityError, transaction
 from rest_framework import serializers
 
 from apps.infractions.models import Infraction
+from apps.media_storage.services import (
+    MEDIA_TYPE_AUDIO,
+    MEDIA_TYPE_IMAGE,
+    MEDIA_TYPE_VIDEO,
+    get_audio_limits,
+    get_image_limits,
+    get_video_limits,
+    validate_uploaded_media,
+)
 from .models import Ticket, TicketInfraction, TicketProof
-
-
-PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png"}
-VIDEO_EXTENSIONS = {".mp4", ".mov"}
-AUDIO_EXTENSIONS = {".m4a", ".mp3", ".wav", ".aac"}
-PHOTO_MIME_PREFIX = "image/"
-VIDEO_MIME_TYPES = set(getattr(settings, "ALERT_EVIDENCE_ALLOWED_VIDEO_MIME_TYPES", ("video/mp4", "video/quicktime")))
-AUDIO_MIME_TYPES = set(getattr(settings, "ALERT_EVIDENCE_ALLOWED_AUDIO_MIME_TYPES", ("audio/mp4", "audio/mpeg", "audio/wav", "audio/aac")))
+from .services import generate_unique_ticket_number, is_valid_ticket_number
 
 
 class TicketProofSerializer(serializers.ModelSerializer):
-    size_bytes = serializers.SerializerMethodField()
     url = serializers.SerializerMethodField()
 
     class Meta:
         model = TicketProof
-        fields = ("id", "file", "url", "evidence_type", "mime_type", "duration_seconds", "caption", "size_bytes", "created_at")
-        read_only_fields = ("mime_type", "size_bytes", "url", "created_at")
-
-    def get_size_bytes(self, obj):
-        try:
-            return obj.file.size
-        except (OSError, ValueError):
-            return None
+        fields = (
+            "id",
+            "file",
+            "url",
+            "evidence_type",
+            "mime_type",
+            "duration_seconds",
+            "caption",
+            "size_bytes",
+            "checksum_sha256",
+            "created_at",
+        )
+        read_only_fields = ("mime_type", "size_bytes", "checksum_sha256", "url", "created_at")
+        extra_kwargs = {"file": {"write_only": True}}
 
     def get_url(self, obj):
         if not obj.file:
             return ""
         request = self.context.get("request")
-        url = obj.file.url
-        return request.build_absolute_uri(url) if request else url
+        path = f"/api/tickets/{obj.ticket_id}/proofs/{obj.pk}/download/"
+        return request.build_absolute_uri(path) if request else path
 
     def validate(self, attrs):
         file_obj = attrs.get("file")
         evidence_type = attrs.get("evidence_type") or TicketProof.EVIDENCE_PHOTO
         duration_seconds = attrs.get("duration_seconds")
-        if not file_obj:
-            raise serializers.ValidationError({"file": "Proof file is required."})
-
-        ext = Path(file_obj.name).suffix.lower()
-        mime_type = getattr(file_obj, "content_type", "") or ""
-        max_photo_size = settings.SECURE_UPLOAD_MAX_MB * 1024 * 1024
-        max_video_size = getattr(settings, "ALERT_EVIDENCE_VIDEO_MAX_MB", 35) * 1024 * 1024
-        max_audio_size = getattr(settings, "ALERT_EVIDENCE_AUDIO_MAX_MB", 10) * 1024 * 1024
 
         if evidence_type == TicketProof.EVIDENCE_PHOTO:
-            if ext not in PHOTO_EXTENSIONS or not mime_type.startswith(PHOTO_MIME_PREFIX):
-                raise serializers.ValidationError({"file": "Unsupported photo format."})
-            if file_obj.size > max_photo_size:
-                raise serializers.ValidationError({"file": "Photo file too large."})
+            metadata = validate_uploaded_media(
+                file_obj,
+                media_type=MEDIA_TYPE_IMAGE,
+                duration_seconds=duration_seconds,
+                field_name="file",
+                **get_image_limits(),
+            )
         elif evidence_type == TicketProof.EVIDENCE_VIDEO:
-            if ext not in VIDEO_EXTENSIONS or mime_type not in VIDEO_MIME_TYPES:
-                raise serializers.ValidationError({"file": "Unsupported video format."})
-            if file_obj.size > max_video_size:
-                raise serializers.ValidationError({"file": "Video file too large."})
-            max_duration = getattr(settings, "ALERT_EVIDENCE_VIDEO_MAX_DURATION_SECONDS", 60)
-            if duration_seconds is not None and duration_seconds > max_duration:
-                raise serializers.ValidationError({"duration_seconds": "Video is too long."})
+            metadata = validate_uploaded_media(
+                file_obj,
+                media_type=MEDIA_TYPE_VIDEO,
+                duration_seconds=duration_seconds,
+                field_name="file",
+                **get_video_limits(),
+            )
         elif evidence_type == TicketProof.EVIDENCE_AUDIO:
-            if ext not in AUDIO_EXTENSIONS or mime_type not in AUDIO_MIME_TYPES:
-                raise serializers.ValidationError({"file": "Unsupported audio format."})
-            if file_obj.size > max_audio_size:
-                raise serializers.ValidationError({"file": "Audio file too large."})
-            max_duration = getattr(settings, "ALERT_EVIDENCE_AUDIO_MAX_DURATION_SECONDS", 180)
-            if duration_seconds is not None and duration_seconds > max_duration:
-                raise serializers.ValidationError({"duration_seconds": "Audio is too long."})
+            metadata = validate_uploaded_media(
+                file_obj,
+                media_type=MEDIA_TYPE_AUDIO,
+                duration_seconds=duration_seconds,
+                field_name="file",
+                **get_audio_limits(),
+            )
         else:
             raise serializers.ValidationError({"evidence_type": "Unsupported evidence type."})
 
-        attrs["mime_type"] = mime_type
+        attrs.update(metadata)
         return attrs
 
 
@@ -90,7 +90,7 @@ class TicketInfractionReadSerializer(serializers.ModelSerializer):
         fields = ("id", "code", "label", "article", "amount")
 
     def get_article(self, obj):
-        return ""
+        return obj.infraction.article or ""
 
 
 class TicketAgentSerializer(serializers.Serializer):
@@ -103,7 +103,7 @@ class TicketAgentSerializer(serializers.Serializer):
 
 
 class TicketSerializer(serializers.ModelSerializer):
-    infraction_ids = serializers.ListField(child=serializers.IntegerField(), write_only=True, required=True)
+    infraction_codes = serializers.ListField(child=serializers.CharField(), write_only=True, required=True)
     proofs = TicketProofSerializer(many=True, read_only=True)
     infractions = TicketInfractionReadSerializer(source="ticket_infractions", many=True, read_only=True)
     agent_detail = serializers.SerializerMethodField()
@@ -124,15 +124,18 @@ class TicketSerializer(serializers.ModelSerializer):
             "status",
             "sync_status",
             "note",
-            "barcode_value",
-            "barcode_image",
-            "infraction_ids",
+            "occurred_at",
+            "location_label",
+            "latitude",
+            "longitude",
+            "ticket_number",
+            "infraction_codes",
             "infractions",
             "proofs",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("agent", "agent_detail", "agent_signature_url", "barcode_value", "barcode_image", "infractions", "proofs", "sync_status")
+        read_only_fields = ("agent", "agent_detail", "agent_signature_url", "ticket_number", "infractions", "proofs", "sync_status")
 
     def get_agent_detail(self, obj):
         agent = obj.agent
@@ -156,21 +159,44 @@ class TicketSerializer(serializers.ModelSerializer):
     def get_sync_status(self, obj):
         return "pending" if obj.status == "PENDING_SYNC" else "synced"
 
-    def validate_infraction_ids(self, value):
+    def validate_infraction_codes(self, value):
         if not value:
             raise serializers.ValidationError("At least one infraction is required.")
-        if Infraction.objects.filter(id__in=value, active=True).count() != len(set(value)):
-            raise serializers.ValidationError("One or more infractions are invalid.")
-        return value
+        normalized = [str(code).strip().upper() for code in value if str(code).strip()]
+        if len(normalized) != len(value):
+            raise serializers.ValidationError("Infraction codes cannot be blank.")
+        duplicates = sorted({code for code in normalized if normalized.count(code) > 1})
+        if duplicates:
+            raise serializers.ValidationError(f"Duplicate infraction codes: {', '.join(duplicates)}.")
+        found = set(Infraction.objects.filter(code__in=normalized, active=True).values_list("code", flat=True))
+        missing = [code for code in normalized if code not in found]
+        if missing:
+            raise serializers.ValidationError(f"Infractions inconnues ou inactives : {', '.join(missing)}.")
+        return normalized
+
+    def validate(self, attrs):
+        ticket_number = attrs.get("ticket_number")
+        if ticket_number and not is_valid_ticket_number(ticket_number):
+            raise serializers.ValidationError({"ticket_number": "Ticket number must use exactly 8 uppercase hexadecimal characters."})
+        return attrs
 
     def create(self, validated_data):
-        ids = validated_data.pop("infraction_ids")
-        ticket = Ticket.objects.create(**validated_data)
-        for infraction in Infraction.objects.filter(id__in=ids):
-            TicketInfraction.objects.create(ticket=ticket, infraction=infraction, amount_snapshot=infraction.amount)
-        return ticket
+        codes = validated_data.pop("infraction_codes")
+        last_error = None
+        for _ in range(10):
+            try:
+                with transaction.atomic():
+                    ticket = Ticket.objects.create(ticket_number=generate_unique_ticket_number(), **validated_data)
+                    infractions = Infraction.objects.filter(code__in=codes, active=True)
+                    infraction_by_code = {infraction.code: infraction for infraction in infractions}
+                    for code in codes:
+                        infraction = infraction_by_code[code]
+                        TicketInfraction.objects.create(ticket=ticket, infraction=infraction, amount_snapshot=infraction.amount or 0)
+                    return ticket
+            except IntegrityError as exc:
+                last_error = exc
+        raise serializers.ValidationError({"ticket_number": "Impossible de generer un numero de PV unique."}) from last_error
 
     def update(self, instance, validated_data):
-        validated_data.pop("infraction_ids", None)
+        validated_data.pop("infraction_codes", None)
         return super().update(instance, validated_data)
-

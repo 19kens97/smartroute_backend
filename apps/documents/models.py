@@ -1,10 +1,12 @@
 from django.conf import settings
 from django.db import models
+
 from apps.core.models import TimeStampedModel
+from apps.media_storage.services import document_upload_path
 from apps.vehicles.models import Vehicle
 
-def upload_doc_path(instance, filename):
-    return f"documents/{instance.vehicle_id}/{filename}"
+upload_doc_path = document_upload_path
+
 
 class Document(TimeStampedModel):
     vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name="documents")

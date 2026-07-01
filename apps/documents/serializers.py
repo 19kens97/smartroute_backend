@@ -1,7 +1,9 @@
-from pathlib import Path
 from django.conf import settings
 from rest_framework import serializers
+
+from apps.media_storage.services import MEDIA_TYPE_DOCUMENT, validate_uploaded_media
 from .models import Document
+
 
 class DocumentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -10,9 +12,11 @@ class DocumentSerializer(serializers.ModelSerializer):
         read_only_fields = ("uploaded_by",)
 
     def validate_file(self, value):
-        ext = Path(value.name).suffix.lower()
-        if ext not in settings.ALLOWED_UPLOAD_EXTENSIONS:
-            raise serializers.ValidationError("Unsupported file extension.")
-        if value.size > settings.SECURE_UPLOAD_MAX_MB * 1024 * 1024:
-            raise serializers.ValidationError("File too large.")
+        validate_uploaded_media(
+            value,
+            media_type=MEDIA_TYPE_DOCUMENT,
+            allowed_mime_types=["application/pdf", "image/jpeg", "image/png"],
+            allowed_extensions=[".pdf", ".jpg", ".jpeg", ".png"],
+            max_size_mb=getattr(settings, "MAX_DOCUMENT_SIZE_MB", getattr(settings, "SECURE_UPLOAD_MAX_MB", 5)),
+        )
         return value

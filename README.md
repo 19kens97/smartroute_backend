@@ -142,3 +142,51 @@ Les tests Gemini mockent uniquement l'appel externe. Les tests Redis/cache utili
 - `.env.example` ne contient aucune cle reelle.
 - `GEMINI_API_KEY` reste backend uniquement.
 - Les logs masquent plaques, NIF, telephone et reponses sensibles selon le middleware existant.
+
+### Catalogue Des Infractions
+
+Le backend est la source officielle du referentiel des infractions. Le catalogue DCPR versionne dans `apps/infractions/catalog.py` est charge en base avec:
+
+```bash
+python manage.py seed_infractions
+```
+
+La commande est idempotente: elle cree les codes manquants, met a jour les champs officiels, conserve les infractions historiques et ne supprime pas physiquement les lignes deja liees a des PV. Les codes metier stables sont `I001` a `I074`; l'ID SQL reste interne et ne doit pas etre utilise comme numero visible.
+
+`GET /api/infractions/` retourne uniquement les infractions actives, sans pagination pour ce referentiel court, dans `data.items` avec `id`, `code`, `number`, `label`, `article`, `category`, `amount`, `penalty_text`, `active`, `display_order`, `updated_at`, et `data.version` basee sur le dernier `updated_at`.
+
+Le catalogue actif est mis en cache cote backend avec la cle Redis/cache `smartroute:infractions:active:v1` pendant 3600 secondes. L'invalidation est centralisee via `invalidate_infraction_catalog_cache()` apres import, creation, modification ou desactivation.
+
+La creation de PV utilise les codes metier:
+
+```json
+{
+  "driver_license": "D-123",
+  "plate_number_snapshot": "AA12345",
+  "infraction_codes": ["I001", "I005"]
+}
+```
+
+Le serializer valide que chaque code existe, est actif, unique dans la requete et normalise en majuscules avant de creer les relations `TicketInfraction`.
+
+## Stockage media centralise
+
+SmartRoute ne stocke pas les fichiers binaires dans la base de donnees. Les modeles conservent uniquement les metadonnees utiles (chemin Django storage, type MIME, taille, checksum SHA-256, duree lorsque disponible et createur lorsque pertinent).
+
+Le module `apps.media_storage.services` centralise les chemins, la validation MIME/extension/taille et le calcul de checksum. Les chemins generes n'utilisent pas le nom original fourni par le client et suivent les conventions suivantes :
+
+- preuves PV : `tickets/{ticket_number}/photos|videos|audio/{uuid}.{ext}`
+- preuves d'alerte : `alerts/{alert_id}/audio|videos/{uuid}.{ext}`
+- signatures agents : `signatures/agents/{agent_id}/{uuid}.png`
+- documents vehicule : `documents/vehicles/{vehicle_id}/{uuid}.{ext}`
+
+Configuration principale : `MEDIA_STORAGE_BACKEND`, `MEDIA_ROOT`, `MEDIA_URL`, `MEDIA_BASE_URL`, `PRIVATE_MEDIA_ENABLED`, `PRIVATE_SIGNATURE_ROOT`, `PRIVATE_ALERT_EVIDENCE_ROOT`, `MAX_IMAGE_SIZE_MB`, `MAX_VIDEO_SIZE_MB`, `MAX_AUDIO_SIZE_MB`, `MAX_DOCUMENT_SIZE_MB`. En developpement, `config.urls` sert `MEDIA_URL` lorsque `DEBUG=True`; les medias sensibles utilisent de preference des endpoints authentifies.
+
+Les endpoints multipart existants restent les points d'entree :
+
+- `POST /api/tickets/{id}/proofs/` avec `file`, `evidence_type`, `duration_seconds` optionnel. La reponse expose `url` vers `/api/tickets/{ticket_id}/proofs/{proof_id}/download/`, pas une URL directe de fichier.
+- `POST /api/alerts/` avec `evidence_file`, `evidence_type`, `evidence_duration_seconds` optionnel. La lecture passe par `/api/alerts/{alert_id}/evidence/{evidence_id}/`.
+- `PUT /api/auth/profile/signature/` accepte soit un fichier `signature`, soit le payload de traits actuel; le backend rend et stocke une image PNG privee.
+- `POST /api/scans/scan-plate/` valide l'image en entree mais ne la persiste pas.
+
+Les logs media utilisent notamment `media_upload_started`, `media_validation_failed`, `media_saved`, `media_downloaded`, `media_access_denied` et `media_deleted`, sans journaliser de contenu binaire ni de donnees sensibles.

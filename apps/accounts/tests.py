@@ -57,7 +57,7 @@ class ProfileSignatureTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.user.refresh_from_db()
-        self.assertTrue(self.user.signature_file.name.startswith(f"{self.user.pk}/"))
+        self.assertTrue(self.user.signature_file.name.startswith(f"signatures/agents/{self.user.pk}/"))
         self.assertEqual(len(self.user.signature_sha256), 64)
         self.assertTrue(response.data["data"]["has_signature"])
 

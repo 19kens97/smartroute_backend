@@ -1,23 +1,30 @@
-from io import BytesIO
+import logging
+import secrets
 
-from barcode import Code128
-from barcode.writer import ImageWriter
-from django.core.files.base import ContentFile
 from django.db.models import Count, Sum
 from django.db.models.functions import Upper
 from django.utils import timezone
 
 from .models import Ticket
 
+logger = logging.getLogger(__name__)
+TICKET_NUMBER_MAX_ATTEMPTS = 10
+TICKET_NUMBER_LENGTH = 8
+
 VALID_UNPAID_TICKET_STATUSES = ("ISSUED", "VALIDATED")
 
 
-def generate_ticket_barcode(ticket):
-    value = f"SMR-{ticket.id:08d}"
-    buff = BytesIO()
-    Code128(value, writer=ImageWriter()).write(buff)
-    ticket.barcode_value = value
-    ticket.barcode_image.save(f"{value}.png", ContentFile(buff.getvalue()), save=False)
+def generate_unique_ticket_number():
+    for attempt in range(1, TICKET_NUMBER_MAX_ATTEMPTS + 1):
+        value = secrets.token_hex(4).upper()
+        if not Ticket.objects.filter(ticket_number=value).exists():
+            return value
+        logger.warning("event=ticket_number_collision_retry attempt=%s ticket_number=%s", attempt, value)
+    raise RuntimeError("Impossible de generer un numero de PV unique.")
+
+
+def is_valid_ticket_number(value):
+    return isinstance(value, str) and len(value) == TICKET_NUMBER_LENGTH and all(char in "0123456789ABCDEF" for char in value)
 
 
 def get_unpaid_valid_tickets_for_drivers(*, drivers=None, vehicle=None, period_start=None, period_end=None):
@@ -58,7 +65,7 @@ def build_unpaid_ticket_summary(tickets):
     items = [
         {
             "id": ticket.id,
-            "ticket_number": ticket.barcode_value or f"SMR-{ticket.id:08d}",
+            "ticket_number": ticket.ticket_number,
             "created_at": ticket.created_at,
             "status": ticket.status,
             "payment_status": "UNPAID",

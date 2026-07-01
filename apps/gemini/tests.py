@@ -109,6 +109,19 @@ class GeminiScanIntegrationTests(APITestCase):
         self.assertEqual(response.json()["message"], "Une image est requise.")
 
     @override_settings(GEMINI_API_KEY="test-key")
+    def test_scan_endpoint_accepts_expo_heic_image_and_persists_scan(self):
+        image = SimpleUploadedFile("plate.heic", b"fake-heic-image", content_type="image/heic")
+
+        with patch("apps.gemini.views.types.Part.from_bytes", return_value="mocked-part"), patch(
+            "apps.gemini.views.generate_with_fallbacks",
+            return_value=(SimpleNamespace(text="TP-16921"), "gemini-2.5-flash", "TP16921", "TP-16921"),
+        ):
+            response = self.client.post("/api/scans/scan-plate/", {"image": image}, format="multipart")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(GeminiScan.objects.count(), 1)
+
+    @override_settings(GEMINI_API_KEY="test-key")
     def test_scan_endpoint_maps_gemini_unavailable(self):
         image = SimpleUploadedFile("plate.jpg", b"fake-image", content_type="image/jpeg")
 

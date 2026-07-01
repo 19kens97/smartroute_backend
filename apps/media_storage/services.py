@@ -147,8 +147,8 @@ def validate_uploaded_media(
 
 def get_image_limits():
     return {
-        "allowed_mime_types": getattr(settings, "ALLOWED_IMAGE_MIME_TYPES", ["image/jpeg", "image/png"]),
-        "allowed_extensions": getattr(settings, "ALLOWED_IMAGE_EXTENSIONS", [".jpg", ".jpeg", ".png"]),
+        "allowed_mime_types": getattr(settings, "ALLOWED_IMAGE_MIME_TYPES", ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"]),
+        "allowed_extensions": getattr(settings, "ALLOWED_IMAGE_EXTENSIONS", [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"]),
         "max_size_mb": min(getattr(settings, "MAX_IMAGE_SIZE_MB", 5), getattr(settings, "SECURE_UPLOAD_MAX_MB", 5)),
     }
 

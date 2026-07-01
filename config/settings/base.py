@@ -175,8 +175,8 @@ MAX_AUDIO_SIZE_MB = config("MAX_AUDIO_SIZE_MB", cast=int, default=10)
 MAX_DOCUMENT_SIZE_MB = config("MAX_DOCUMENT_SIZE_MB", cast=int, default=5)
 SECURE_UPLOAD_MAX_MB = MAX_IMAGE_SIZE_MB
 ALLOWED_UPLOAD_EXTENSIONS = [".jpg", ".jpeg", ".png", ".pdf"]
-ALLOWED_IMAGE_MIME_TYPES = ["image/jpeg", "image/png"]
-ALLOWED_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png"]
+ALLOWED_IMAGE_MIME_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"]
+ALLOWED_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"]
 ALERT_EVIDENCE_AUDIO_MAX_MB = MAX_AUDIO_SIZE_MB
 ALERT_EVIDENCE_VIDEO_MAX_MB = MAX_VIDEO_SIZE_MB
 ALERT_EVIDENCE_AUDIO_MAX_DURATION_SECONDS = 180

@@ -1,4 +1,4 @@
-﻿import os
+import os
 import shutil
 import tempfile
 
@@ -46,9 +46,10 @@ class TicketApiTests(APITestCase):
         self.assertEqual(r.status_code, 400)
 
     def test_ticket_create_with_infraction(self):
-        r = self.client.post("/api/tickets/", {"driver_license": "D1", "plate_number_snapshot": "AA1", "infraction_codes": [self.inf.code]}, format="json")
+        r = self.client.post("/api/tickets/", {"driver_license": "D1", "driver_name_snapshot": "Jean Test", "plate_number_snapshot": "AA1", "infraction_codes": [self.inf.code]}, format="json")
         self.assertEqual(r.status_code, 201)
         self.assertEqual(r.data["driver_license"], "D1")
+        self.assertEqual(r.data["driver_name_snapshot"], "Jean Test")
         self.assertEqual(r.data["plate_number_snapshot"], "AA1")
         self.assertEqual(r.data["infractions"][0]["id"], self.inf.id)
         self.assertRegex(r.data["ticket_number"], r"^[0-9A-F]{8}$")

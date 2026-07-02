@@ -1,4 +1,4 @@
-﻿from django.db import IntegrityError, transaction
+from django.db import IntegrityError, transaction
 from rest_framework import serializers
 
 from apps.infractions.models import Infraction
@@ -119,6 +119,7 @@ class TicketSerializer(serializers.ModelSerializer):
             "agent_detail",
             "agent_signature_url",
             "driver_license",
+            "driver_name_snapshot",
             "plate_number_snapshot",
             "vehicle",
             "status",

@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from rest_framework.test import APITestCase
 from unittest.mock import patch, MagicMock
 from django.urls import resolve, Resolver404
@@ -7,6 +8,7 @@ from django.urls import resolve, Resolver404
 SCAN_PLATE_PATH = "/api/scans/scan-plate/"
 
 
+@override_settings(GEMINI_API_KEY="test-gemini-key")
 class GeminiScanAPITests(APITestCase):
     def test_scan_plate_routes_resolve(self):
         self.assertIsNotNone(resolve(SCAN_PLATE_PATH).func)
@@ -82,6 +84,7 @@ class GeminiScanAPITests(APITestCase):
         self.assertIsNotNone(scan)
         self.assertEqual(scan.plate_number, "BB-22222")
         self.assertTrue(scan.plate_detected)
+        self.assertTrue(scan.image.name.startswith("scans/"))
 
     @patch("google.genai.Client")
     def test_scan_plate_matches_existing_vehicle(self, mock_client_class):

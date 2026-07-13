@@ -9,7 +9,16 @@ from apps.owners.models import Owner
 
 def normalize_plate_number(value):
     """Return the canonical representation used for stored registration plates."""
-    return "".join((value or "").split()).upper()
+    return "".join((value or "").replace("-", "").split()).upper()
+
+
+def plate_number_lookup_variants(value):
+    """Return accepted plate variants for existing compact and hyphenated records."""
+    normalized = normalize_plate_number(value)
+    variants = {normalized} if normalized else set()
+    if len(normalized) > 2:
+        variants.add(f"{normalized[:2]}-{normalized[2:]}")
+    return list(variants)
 
 
 def normalize_engine_number(value):

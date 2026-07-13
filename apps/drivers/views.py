@@ -11,7 +11,7 @@ from .serializers import (
     DriverNIFSearchQuerySerializer,
     DriverSerializer,
 )
-from .services import build_license_search_result, normalize_dossier_number, normalize_nif, normalized_nif_expression
+from .services import build_license_search_result, normalize_dossier_lookup_value, normalize_nif, normalized_dossier_expression, normalized_nif_expression
 
 LICENSE_SEARCH_FIELDS = (
     "id",
@@ -128,10 +128,11 @@ class DriverViewSet(ModelViewSet):
                 status.HTTP_400_BAD_REQUEST,
             )
 
-        dossier_number = normalize_dossier_number(serializer.validated_data["dossier_number"])
+        dossier_number = normalize_dossier_lookup_value(serializer.validated_data["dossier_number"])
         drivers = list(
             Driver.objects.only(*LICENSE_SEARCH_FIELDS)
-            .filter(dossier_number__iexact=dossier_number)
+            .annotate(normalized_dossier_number=normalized_dossier_expression())
+            .filter(normalized_dossier_number=dossier_number)
             .order_by("-id")
         )
         if not drivers:

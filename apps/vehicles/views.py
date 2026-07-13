@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
@@ -9,7 +10,7 @@ from apps.accounts.permissions import IsAdminOrEntryAgentRole, IsEntryAgentRole
 from apps.core.api import api_response
 from apps.core.services import log_action
 
-from .models import Vehicle, normalize_plate_number
+from .models import Vehicle, normalize_plate_number, plate_number_lookup_variants
 from .serializers import VehicleSerializer
 
 
@@ -55,5 +56,8 @@ class VehicleViewSet(ModelViewSet):
         normalized = normalize_plate_number(plate_number)
         if not normalized or len(normalized) > Vehicle._meta.get_field("plate_number").max_length:
             return api_response(False, "Numero d'immatriculation invalide.", {}, {"plate_number": ["La plaque est requise et ne peut pas depasser 20 caracteres."]}, status.HTTP_400_BAD_REQUEST)
-        vehicle = get_object_or_404(self.get_queryset(), plate_number__iexact=normalized)
+        lookup = Q()
+        for variant in plate_number_lookup_variants(normalized):
+            lookup |= Q(plate_number__iexact=variant)
+        vehicle = get_object_or_404(self.get_queryset(), lookup)
         return api_response(True, "Vehicule trouve.", self.get_serializer(vehicle).data)

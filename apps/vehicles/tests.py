@@ -37,7 +37,7 @@ class VehicleModelAndSerializerTests(TestCase):
             plate_number="  ab - 123  ",
             engine_number="  eng   42-x ",
         )
-        self.assertEqual(vehicle.plate_number, "AB-123")
+        self.assertEqual(vehicle.plate_number, "AB123")
         self.assertEqual(vehicle.engine_number, "ENG 42-X")
 
     def test_serializer_exposes_stable_vehicle_contract_and_owner_name(self):
@@ -64,7 +64,7 @@ class VehicleModelAndSerializerTests(TestCase):
         Vehicle.objects.create(plate_number="DD-444")
         serializer = VehicleSerializer(data={"plate_number": "  ee - 555 "})
         self.assertTrue(serializer.is_valid(), serializer.errors)
-        self.assertEqual(serializer.validated_data["plate_number"], "EE-555")
+        self.assertEqual(serializer.validated_data["plate_number"], "EE555")
 
         duplicate = VehicleSerializer(data={"plate_number": " dd-444 "})
         self.assertFalse(duplicate.is_valid())
@@ -165,15 +165,24 @@ class VehicleApiTests(APITestCase):
             response = self.client.delete(f"/api/vehicles/{self.vehicle.pk}/")
             self.assertEqual(response.status_code, 405)
 
-    def test_exact_plate_search_normalizes_case_spaces_and_preserves_hyphen(self):
+    def test_exact_plate_search_normalizes_case_spaces_and_hyphens(self):
         self.authenticate(self.field)
         response = self.client.get("/api/vehicles/by-plate/%20ht-%2012345%20/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["data"]["plate_number"], "HT-12345")
+        self.assertEqual(response.data["data"]["plate_number"], "HT12345")
         self.assertIsInstance(response.data["data"], dict)
         self.assertEqual(response.data["data"]["owner_name"], "Paul Pierre")
         self.assertIn("year", response.data["data"])
         self.assertIn("engine_number", response.data["data"])
+
+    def test_exact_plate_search_supports_legacy_hyphenated_records(self):
+        Vehicle.objects.filter(pk=self.vehicle.pk).update(plate_number="TT-00030")
+        self.authenticate(self.field)
+
+        response = self.client.get("/api/vehicles/by-plate/TT-00030/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["plate_number"], "TT-00030")
 
     def test_exact_plate_search_returns_clear_404(self):
         self.authenticate(self.field)

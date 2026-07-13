@@ -17,6 +17,7 @@ class SmartRouteDemoSeedTests(TestCase):
         milo = User.objects.get(username="milo")
         self.assertTrue(milo.check_password("Kens0001"))
         self.assertEqual(milo.role, User.Role.AGENT_TERRAIN)
+        self.assertEqual(User.objects.filter(role=User.Role.AGENT_TERRAIN).count(), 3)
 
         self.assertEqual(
             set(Alert.objects.values_list("alert_type", flat=True)),
@@ -30,7 +31,7 @@ class SmartRouteDemoSeedTests(TestCase):
             },
         )
         self.assertEqual(set(Ticket.objects.values_list("status", flat=True)), {"DRAFT", "PENDING_SYNC", "ISSUED", "VALIDATED", "CANCELLED", "PAID"})
-        self.assertEqual(set(InsurancePolicy.objects.values_list("status", flat=True)), {InsurancePolicy.STATUS_VALID, InsurancePolicy.STATUS_EXPIRED, InsurancePolicy.STATUS_SUSPENDED})
+        self.assertEqual(set(InsurancePolicy.objects.values_list("status", flat=True)), {InsurancePolicy.STATUS_VALID, InsurancePolicy.STATUS_EXPIRED})
         self.assertGreaterEqual(Scan.objects.values("source").distinct().count(), 3)
         self.assertTrue(GeminiScan.objects.filter(plate_detected=True).exists())
         self.assertTrue(GeminiScan.objects.filter(plate_detected=False).exists())
@@ -43,4 +44,18 @@ class SmartRouteDemoSeedTests(TestCase):
 
         call_command("seed_smartroute_demo", verbosity=0)
         self.assertEqual(User.objects.filter(username="milo").count(), 1)
+        self.assertEqual(Ticket.objects.count(), 7)
+
+    def test_reset_and_seed_requires_explicit_confirmation(self):
+        with self.assertRaisesMessage(Exception, "--confirm"):
+            call_command("reset_and_seed_smartroute", verbosity=0)
+
+    def test_reset_and_seed_smartroute_flushes_and_recreates_demo_dataset(self):
+        User = get_user_model()
+        User.objects.create_user(username="temporary_user", password="Pass1234!")
+
+        call_command("reset_and_seed_smartroute", "--confirm", verbosity=0)
+
+        self.assertFalse(User.objects.filter(username="temporary_user").exists())
+        self.assertEqual(User.objects.filter(role=User.Role.AGENT_TERRAIN).count(), 3)
         self.assertEqual(Ticket.objects.count(), 7)

@@ -7,11 +7,9 @@ from apps.vehicles.models import Vehicle
 class InsurancePolicy(TimeStampedModel):
     STATUS_VALID = "VALID"
     STATUS_EXPIRED = "EXPIRED"
-    STATUS_SUSPENDED = "SUSPENDED"
     STATUS_CHOICES = (
         (STATUS_VALID, "Valide"),
-        (STATUS_EXPIRED, "Expirée"),
-        (STATUS_SUSPENDED, "Suspendue"),
+        (STATUS_EXPIRED, "Expiree"),
     )
 
     vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name="insurance_policies")
@@ -22,4 +20,3 @@ class InsurancePolicy(TimeStampedModel):
 
     def __str__(self):
         return f"{self.policy_number} - {self.vehicle.plate_number}"
-

@@ -91,6 +91,7 @@ class Command(BaseCommand):
         specs = [
             {"username": "admin", "password": DEFAULT_PASSWORD, "role": User.Role.ADMIN, "first_name": "Nadia", "last_name": "Beaubrun", "email": "admin@smartroute.local", "badge_number": "DCPR-0001", "phone": "+50937001001", "precinct": "Direction centrale", "post": "Administratrice", "nif": "NIF-HT-000001", "is_staff": True, "is_superuser": True},
             {"username": "agent_terrain", "password": DEFAULT_PASSWORD, "role": User.Role.AGENT_TERRAIN, "first_name": "Jean", "last_name": "Baptiste", "email": "terrain@smartroute.local", "badge_number": "DCPR-2104", "phone": "+50937001002", "precinct": "Delmas", "post": "Agent de terrain", "nif": "NIF-HT-000002"},
+            {"username": "agent_terrain_nord", "password": DEFAULT_PASSWORD, "role": User.Role.AGENT_TERRAIN, "first_name": "Samuel", "last_name": "Dorvil", "email": "terrain.nord@smartroute.local", "badge_number": "DCPR-2188", "phone": "+50937001022", "precinct": "Cap-Haitien", "post": "Agent de terrain", "nif": "NIF-HT-000022"},
             {"username": "agent_saisie", "password": DEFAULT_PASSWORD, "role": User.Role.AGENT_SAISIE, "first_name": "Claudine", "last_name": "Etienne", "email": "saisie@smartroute.local", "badge_number": "DCPR-3108", "phone": "+50937001003", "precinct": "Petion-Ville", "post": "Agent de saisie", "nif": "NIF-HT-000003", "is_staff": True},
             {"username": "milo", "password": MILO_PASSWORD, "role": User.Role.AGENT_TERRAIN, "first_name": "Milo", "last_name": "Pierre", "email": "milo@smartroute.local", "badge_number": "DCPR-7421", "phone": "+50937001111", "precinct": "Delmas", "post": "Agent de terrain", "nif": "NIF-HT-009871"},
         ]
@@ -152,7 +153,7 @@ class Command(BaseCommand):
         specs = [
             {"vehicle": vehicles["AA12345"], "insurer": "OAVCT", "policy_number": "OAVCT-AA12345-2026", "valid_until": today + timedelta(days=180), "status": InsurancePolicy.STATUS_VALID},
             {"vehicle": vehicles["BB54321"], "insurer": "OAVCT", "policy_number": "OAVCT-BB54321-2026", "valid_until": today - timedelta(days=30), "status": InsurancePolicy.STATUS_EXPIRED},
-            {"vehicle": vehicles["CC67890"], "insurer": "Haiti Assurance", "policy_number": "HA-CC67890-2026", "valid_until": today + timedelta(days=90), "status": InsurancePolicy.STATUS_SUSPENDED},
+            {"vehicle": vehicles["CC67890"], "insurer": "Haiti Assurance", "policy_number": "HA-CC67890-2026", "valid_until": today - timedelta(days=1), "status": InsurancePolicy.STATUS_EXPIRED},
             {"vehicle": vehicles["DD24680"], "insurer": "Caribe Assurance", "policy_number": "CA-DD24680-2026", "valid_until": today + timedelta(days=15), "status": InsurancePolicy.STATUS_VALID},
             {"vehicle": vehicles["EE13579"], "insurer": "OAVCT", "policy_number": "OAVCT-EE13579-2026", "valid_until": today - timedelta(days=5), "status": InsurancePolicy.STATUS_EXPIRED},
         ]

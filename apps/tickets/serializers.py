@@ -158,7 +158,14 @@ class TicketSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(path) if request else path
 
     def get_sync_status(self, obj):
-        return "pending" if obj.status == "PENDING_SYNC" else "synced"
+        return "pending" if obj.status == Ticket.STATUS_PENDING_SYNC else "synced"
+
+    def validate_status(self, value):
+        request = self.context.get("request")
+        role = getattr(getattr(request, "user", None), "role", None)
+        if value == Ticket.STATUS_CANCELLED and role != "ADMIN":
+            raise serializers.ValidationError("Seul un administrateur peut annuler un PV.")
+        return value
 
     def validate_infraction_codes(self, value):
         if not value:

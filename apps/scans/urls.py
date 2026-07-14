@@ -1,6 +1,6 @@
 ﻿from django.urls import path
 from rest_framework.routers import DefaultRouter
-from .views import RecognizeView, ScanViewSet, extract_license_plate, get_last_scan, search_plate
+from .views import RecognizeView, ScanHistoryImageView, ScanHistoryView, ScanViewSet, extract_license_plate, get_last_scan, search_plate
 
 router = DefaultRouter()
 router.register("", ScanViewSet, basename="scan")
@@ -9,4 +9,6 @@ urlpatterns = [
     path("scan-plate/", extract_license_plate),
     path("search/", search_plate),
     path("last-scan/", get_last_scan),
+    path("history/", ScanHistoryView.as_view()),
+    path("history/<int:pk>/image/", ScanHistoryImageView.as_view()),
 ] + router.urls

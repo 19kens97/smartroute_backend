@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 TICKET_NUMBER_MAX_ATTEMPTS = 10
 TICKET_NUMBER_LENGTH = 8
 
-VALID_UNPAID_TICKET_STATUSES = ("ISSUED", "VALIDATED")
+VALID_UNPAID_TICKET_STATUSES = (Ticket.STATUS_VALIDATED,)
 
 
 def generate_unique_ticket_number():

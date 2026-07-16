@@ -114,6 +114,7 @@ class Command(BaseCommand):
             {"full_name": "Daniel Etienne", "national_id": "NIF-HT-100003", "phone": "+50937000003", "address": "Carrefour"},
             {"full_name": "Rachelle Francois", "national_id": "NIF-HT-100004", "phone": "+50937000004", "address": "Tabarre"},
             {"full_name": "Samuelle Joseph", "national_id": "NIF-HT-100005", "phone": "+50937000005", "address": "Croix-des-Bouquets"},
+            {"full_name": "Wideline Augustin", "national_id": "NIF-HT-169210", "phone": "+50937169210", "address": "Delmas 75, Ouest"},
         ]
         owners = {}
         for spec in specs:
@@ -128,6 +129,7 @@ class Command(BaseCommand):
             {"plate_number": "CC67890", "owner": owners["NIF-HT-100003"], "brand": "Hyundai", "model": "Elantra", "color": "Noir", "year": 2020, "engine_number": "ENG-CC-67890", "registration_valid_until": today + timedelta(days=60), "is_wanted": False},
             {"plate_number": "DD24680", "owner": owners["NIF-HT-100004"], "brand": "Kia", "model": "Sportage", "color": "Rouge", "year": 2021, "engine_number": "ENG-DD-24680", "registration_valid_until": today + timedelta(days=15), "is_wanted": False},
             {"plate_number": "EE13579", "owner": owners["NIF-HT-100005"], "brand": "Isuzu", "model": "NPR", "color": "Bleu", "year": 2015, "engine_number": "ENG-EE-13579", "registration_valid_until": today - timedelta(days=90), "is_wanted": False},
+            {"plate_number": "TP16921", "owner": owners["NIF-HT-169210"], "brand": "Toyota", "model": "RAV4", "color": "Bleu marine", "year": 2022, "engine_number": "2AR-TP16921-HT", "registration_valid_until": today + timedelta(days=365), "is_wanted": False},
         ]
         vehicles = {}
         for spec in specs:
@@ -142,6 +144,7 @@ class Command(BaseCommand):
             {"dossier_number": "DL-10003", "nif": "NIF-HT-100003", "full_name": "Steeve Jean", "address": "Carrefour", "birth_date": date(1985, 12, 22), "sex": "M", "blood_group": "B+", "license_type": "C", "issue_place": "Port-au-Prince", "issue_date": today - timedelta(days=1600), "expires_at": today - timedelta(days=30)},
             {"dossier_number": "DL-20001", "nif": "NIF-HT-200200", "full_name": "Elodie Charles", "address": "Tabarre", "birth_date": date(1994, 2, 18), "sex": "F", "blood_group": "AB+", "license_type": "B", "issue_place": "Port-au-Prince", "issue_date": today - timedelta(days=300), "expires_at": today + timedelta(days=1500)},
             {"dossier_number": "DL-20002", "nif": "NIF-HT-200200", "full_name": "Elodie Charles", "address": "Tabarre", "birth_date": date(1994, 2, 18), "sex": "F", "blood_group": "AB+", "license_type": "C", "issue_place": "Cap-Haitien", "issue_date": today - timedelta(days=120), "expires_at": today + timedelta(days=1600)},
+            {"dossier_number": "DL-TP-16921", "nif": "NIF-HT-169210", "full_name": "Wideline Augustin", "address": "Delmas 75, Ouest", "birth_date": date(1990, 8, 17), "sex": "F", "blood_group": "O+", "license_type": "B", "issue_place": "Port-au-Prince", "issue_date": today - timedelta(days=540), "expires_at": today + timedelta(days=1285)},
         ]
         drivers = {}
         for spec in specs:
@@ -156,6 +159,7 @@ class Command(BaseCommand):
             {"vehicle": vehicles["CC67890"], "insurer": "Haiti Assurance", "policy_number": "HA-CC67890-2026", "valid_until": today - timedelta(days=1), "status": InsurancePolicy.STATUS_EXPIRED},
             {"vehicle": vehicles["DD24680"], "insurer": "Caribe Assurance", "policy_number": "CA-DD24680-2026", "valid_until": today + timedelta(days=15), "status": InsurancePolicy.STATUS_VALID},
             {"vehicle": vehicles["EE13579"], "insurer": "OAVCT", "policy_number": "OAVCT-EE13579-2026", "valid_until": today - timedelta(days=5), "status": InsurancePolicy.STATUS_EXPIRED},
+            {"vehicle": vehicles["TP16921"], "insurer": "OAVCT", "policy_number": "OAVCT-TP16921-2026", "valid_until": today + timedelta(days=365), "status": InsurancePolicy.STATUS_VALID},
         ]
         for spec in specs:
             InsurancePolicy.objects.update_or_create(policy_number=spec["policy_number"], defaults=spec)
@@ -282,6 +286,7 @@ class Command(BaseCommand):
             {"vehicle": vehicles["BB54321"], "uploaded_by": users["agent_saisie"], "title": "Carte grise expiree BB54321", "filename": "carte_grise_bb54321.pdf"},
             {"vehicle": vehicles["CC67890"], "uploaded_by": users["admin"], "title": "Assurance suspendue CC67890", "filename": "assurance_cc67890.pdf"},
             {"vehicle": vehicles["EE13579"], "uploaded_by": users["admin"], "title": "Immatriculation expiree EE13579", "filename": "immatriculation_ee13579.pdf"},
+            {"vehicle": vehicles["TP16921"], "uploaded_by": users["agent_saisie"], "title": "Carte grise valide TP-16921", "filename": "carte_grise_tp16921.pdf"},
         ]
         for spec in specs:
             document, _ = Document.objects.get_or_create(vehicle=spec["vehicle"], title=spec["title"], defaults={"uploaded_by": spec["uploaded_by"]})

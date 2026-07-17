@@ -14,7 +14,26 @@ VALIDITY_UNKNOWN = "UNKNOWN"
 
 
 def normalize_dossier_number(value: str) -> str:
-    return str(value or "").strip()
+    return str(value or "").strip().upper()
+
+
+def normalize_dossier_lookup_value(value: str) -> str:
+    value = normalize_dossier_number(value)
+    return "".join(char for char in value if not char.isspace() and char != "-")
+
+
+def normalized_dossier_expression(field_name="dossier_number"):
+    return Upper(
+        Replace(
+            Replace(
+                Replace(F(field_name), Value("-"), Value("")),
+                Value(" "),
+                Value(""),
+            ),
+            Value("	"),
+            Value(""),
+        )
+    )
 
 
 def normalize_nif(value: str) -> str:

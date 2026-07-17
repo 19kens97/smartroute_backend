@@ -24,7 +24,7 @@ class InsurancePolicySerializerTests(TestCase):
             status=InsurancePolicy.STATUS_VALID,
         )
         data = InsurancePolicySerializer(policy).data
-        self.assertEqual(data["plate_number"], "AA-10001")
+        self.assertEqual(data["plate_number"], "AA10001")
         self.assertEqual(data["owner_name"], "Marie Joseph")
         self.assertTrue(data["is_currently_valid"])
 
@@ -60,6 +60,15 @@ class InsurancePolicyApiTests(APITestCase):
     def test_plate_search_normalizes_and_orders_active_policy_first(self):
         self.client.force_authenticate(self.user)
         response = self.client.get("/api/insurance/", {"plate_number": " ht- 24680 "})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.data], [self.active.id, self.expired.id])
+
+    def test_plate_search_supports_legacy_hyphenated_vehicle_records(self):
+        Vehicle.objects.filter(pk=self.vehicle.pk).update(plate_number="TT-00030")
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get("/api/insurance/", {"plate_number": "TT-00030"})
+
         self.assertEqual(response.status_code, 200)
         self.assertEqual([item["id"] for item in response.data], [self.active.id, self.expired.id])
 

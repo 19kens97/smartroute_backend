@@ -59,7 +59,7 @@ class TicketViewSet(ModelViewSet):
                 ticket.pk,
                 self.request.user.pk,
                 ticket.ticket_number,
-                "pending" if ticket.status == "PENDING_SYNC" else "synced",
+                "pending" if ticket.status == Ticket.STATUS_PENDING_SYNC else "synced",
                 ticket.ticket_infractions.count(),
             )
             logger.info(

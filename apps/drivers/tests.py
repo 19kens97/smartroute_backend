@@ -165,6 +165,19 @@ class DriverApiTests(APITestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn("driver_license", response.data["errors"])
 
+    def test_dossier_search_ignores_spaces_and_hyphens(self):
+        driver = self.create_driver("XI-37596-KL", nif="4455667788")
+        self.force_auth(self.terrain)
+
+        hyphenated = self.client.get("/api/drivers/search-by-dossier/", {"dossier_number": "XI-37596-KL"})
+        compact = self.client.get("/api/drivers/search-by-dossier/", {"dossier_number": "XI37596KL"})
+        spaced = self.client.get("/api/drivers/search-by-dossier/", {"dossier_number": " xi 37596 kl "})
+
+        self.assertEqual(hyphenated.status_code, 200)
+        self.assertEqual(compact.status_code, 200)
+        self.assertEqual(spaced.status_code, 200)
+        self.assertEqual(self.license_payload(compact)["id"], driver.id)
+
     def test_dossier_search_is_case_insensitive(self):
         self.force_auth(self.terrain)
         response = self.client.get("/api/drivers/search-by-dossier/", {"dossier_number": "dos-001"})

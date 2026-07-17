@@ -12,6 +12,7 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from apps.infractions.models import Infraction
+from apps.core.models import AuditLog
 from .models import Ticket, TicketInfraction, TicketProof
 from .services import TICKET_NUMBER_MAX_ATTEMPTS, generate_unique_ticket_number
 
@@ -28,6 +29,7 @@ class TicketApiTests(APITestCase):
         self.terrain = User.objects.create_user(username="terrain", password="Pass1234!", role="AGENT_TERRAIN", first_name="Agent", last_name="Terrain", badge_number="AGT-1")
         self.other_terrain = User.objects.create_user(username="terrain2", password="Pass1234!", role="AGENT_TERRAIN")
         self.saisie = User.objects.create_user(username="saisie", password="Pass1234!", role="AGENT_SAISIE")
+        self.admin = User.objects.create_user(username="admin", password="Pass1234!", role="ADMIN")
         token = self.client.post("/api/auth/token/", {"username": "terrain", "password": "Pass1234!"}, format="json").data["access"]
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         self.inf = Infraction.objects.create(code="I001", label="Test", amount=100)
@@ -55,6 +57,7 @@ class TicketApiTests(APITestCase):
         self.assertRegex(r.data["ticket_number"], r"^[0-9A-F]{8}$")
         self.assertTrue(Ticket.objects.filter(id=r.data["id"], ticket_number=r.data["ticket_number"], agent=self.terrain).exists())
         self.assertTrue(TicketInfraction.objects.filter(ticket_id=r.data["id"], infraction=self.inf).exists())
+        self.assertEqual(r.data["status"], Ticket.STATUS_VALIDATED)
 
     def test_ticket_number_is_unique_and_read_only(self):
         first = self.client.post("/api/tickets/", {"driver_license": "D1", "plate_number_snapshot": "AA1", "infraction_codes": [self.inf.code], "ticket_number": "ABCDEF12"}, format="json")
@@ -155,6 +158,28 @@ class TicketApiTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         r = self.client.patch(f"/api/tickets/{ticket.id}/", {"status": "PENDING_SYNC"}, format="json")
         self.assertEqual(r.status_code, 200)
+
+    def test_only_admin_can_cancel_ticket_and_cancellation_is_audited(self):
+        ticket = self.create_ticket()
+        saisie_token = self.client.post("/api/auth/token/", {"username": "saisie", "password": "Pass1234!"}, format="json").data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {saisie_token}")
+        denied = self.client.patch(f"/api/tickets/{ticket.id}/", {"status": Ticket.STATUS_CANCELLED}, format="json")
+        self.assertEqual(denied.status_code, 400)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.status, Ticket.STATUS_VALIDATED)
+
+        admin_token = self.client.post("/api/auth/token/", {"username": "admin", "password": "Pass1234!"}, format="json").data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {admin_token}")
+        cancelled = self.client.patch(f"/api/tickets/{ticket.id}/", {"status": Ticket.STATUS_CANCELLED}, format="json")
+        self.assertEqual(cancelled.status_code, 200)
+        self.assertEqual(cancelled.data["status"], Ticket.STATUS_CANCELLED)
+        self.assertTrue(AuditLog.objects.filter(
+            actor=self.admin,
+            model_name="Ticket",
+            object_id=str(ticket.id),
+            action="STATUS_CHANGE",
+            payload={"from": Ticket.STATUS_VALIDATED, "to": Ticket.STATUS_CANCELLED},
+        ).exists())
 
     def test_ticket_accepts_photo_video_and_audio_proofs(self):
         ticket = self.create_ticket()

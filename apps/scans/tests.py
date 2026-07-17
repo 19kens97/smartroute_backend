@@ -217,3 +217,43 @@ class GeminiScanAPITests(APITestCase):
 
         self.assertEqual(scan.status_code, 401)
         self.assertEqual(search.status_code, 401)
+
+    def test_scan_history_contains_only_current_user_records_and_protected_image(self):
+        from apps.scans.models import GeminiScan, Scan
+
+        User = get_user_model()
+        other = User.objects.create_user(username="history-other", password="pass")
+        Scan.objects.create(agent=self.user, plate_number="MANUAL-1", source="MANUAL")
+        own_scan = GeminiScan.objects.create(
+            agent=self.user,
+            plate_number="CAMERA-1",
+            image=SimpleUploadedFile("camera.jpg", b"scan-photo", content_type="image/jpeg"),
+            plate_detected=True,
+        )
+        other_scan = GeminiScan.objects.create(
+            agent=other,
+            plate_number="PRIVATE-1",
+            image=SimpleUploadedFile("private.jpg", b"private-photo", content_type="image/jpeg"),
+            plate_detected=True,
+        )
+
+        history = self.client.get("/api/scans/history/")
+        self.assertEqual(history.status_code, 200)
+        records = history.data["data"]
+        self.assertEqual({record["plate_number"] for record in records}, {"MANUAL-1", "CAMERA-1"})
+        camera_record = next(record for record in records if record["plate_number"] == "CAMERA-1")
+        self.assertEqual(camera_record["image_url"], f"/api/scans/history/{own_scan.pk}/image/")
+
+        image = self.client.get(camera_record["image_url"])
+        self.assertEqual(image.status_code, 200)
+        self.assertEqual(image["Cache-Control"], "private, no-store")
+        self.assertEqual(b"".join(image.streaming_content), b"scan-photo")
+        denied = self.client.get(f"/api/scans/history/{other_scan.pk}/image/")
+        self.assertEqual(denied.status_code, 404)
+
+        own_scan.image.delete(save=False)
+        other_scan.image.delete(save=False)
+
+    def test_scan_history_requires_authentication(self):
+        self.client.force_authenticate(user=None)
+        self.assertEqual(self.client.get("/api/scans/history/").status_code, 401)

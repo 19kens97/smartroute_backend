@@ -1,10 +1,10 @@
-from django.db.models import Case, IntegerField, Value, When
+from django.db.models import Case, IntegerField, Q, Value, When
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.viewsets import ModelViewSet
 
-from apps.vehicles.models import normalize_plate_number
+from apps.vehicles.models import plate_number_lookup_variants
 from .models import InsurancePolicy
 from .serializers import InsurancePolicySerializer
 
@@ -32,14 +32,16 @@ class InsurancePolicyViewSet(ModelViewSet):
             status_priority=Case(
                 When(status=InsurancePolicy.STATUS_VALID, valid_until__gte=today, then=Value(0)),
                 When(valid_until__lt=today, then=Value(1)),
-                When(status=InsurancePolicy.STATUS_SUSPENDED, then=Value(2)),
-                default=Value(3),
+                default=Value(2),
                 output_field=IntegerField(),
             )
         )
         plate_number = self.request.query_params.get("plate_number")
         if plate_number:
-            queryset = queryset.filter(vehicle__plate_number__iexact=normalize_plate_number(plate_number))
+            lookup = Q()
+            for variant in plate_number_lookup_variants(plate_number):
+                lookup |= Q(vehicle__plate_number__iexact=variant)
+            queryset = queryset.filter(lookup)
         policy_number = self.request.query_params.get("policy_number")
         if policy_number:
             queryset = queryset.filter(policy_number__iexact=policy_number.strip())

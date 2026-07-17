@@ -9,14 +9,23 @@ from apps.vehicles.models import Vehicle
 proof_upload_path = ticket_proof_upload_path
 
 class Ticket(TimeStampedModel):
-    STATUS_CHOICES=[("DRAFT","DRAFT"),("PENDING_SYNC","PENDING_SYNC"),("ISSUED","ISSUED"),("VALIDATED","VALIDATED"),("CANCELLED","CANCELLED"),("PAID","PAID")]
+    STATUS_PENDING_SYNC = "PENDING_SYNC"
+    STATUS_VALIDATED = "VALIDATED"
+    STATUS_PAID = "PAID"
+    STATUS_CANCELLED = "CANCELLED"
+    STATUS_CHOICES = [
+        (STATUS_PENDING_SYNC, "En attente de synchronisation"),
+        (STATUS_VALIDATED, "Valide"),
+        (STATUS_PAID, "Paye"),
+        (STATUS_CANCELLED, "Annule"),
+    ]
     client_uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
     agent = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="tickets")
     driver_license = models.CharField(max_length=80)
     driver_name_snapshot = models.CharField(max_length=160, blank=True)
     plate_number_snapshot = models.CharField(max_length=20)
     vehicle = models.ForeignKey(Vehicle, on_delete=models.SET_NULL, null=True, blank=True, related_name="tickets")
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="DRAFT")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_VALIDATED)
     note = models.TextField(blank=True)
     occurred_at = models.DateTimeField(null=True, blank=True)
     location_label = models.CharField(max_length=255, blank=True)

@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 from apps.core.api import api_response
 from apps.core.cache import DASHBOARD_CACHE_TTL_SECONDS, dashboard_cache_key, safe_cache_get, safe_cache_set
 from apps.scans.models import GeminiScan, Scan
-from apps.sync.models import SyncLog
+from apps.sync.models import SyncSession
 from apps.tickets.models import Ticket, TicketInfraction
 
 logger = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ class DashboardSummaryView(APIView):
         scans_total = sum(item["scans"] for item in daily_activity)
         tickets_total = sum(item["tickets"] for item in daily_activity)
         infraction_total = TicketInfraction.objects.filter(ticket__created_at__gte=start_dt, ticket__created_at__lt=end_dt).count()
-        pending_sync = SyncLog.objects.exclude(status="SUCCESS").count()
+        pending_sync = SyncSession.objects.exclude(status=SyncSession.Status.SUCCESS).count()
 
         top_rows = list(
             TicketInfraction.objects.filter(ticket__created_at__gte=start_dt, ticket__created_at__lt=end_dt)

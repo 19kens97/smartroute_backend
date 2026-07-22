@@ -1,204 +1,315 @@
-from rest_framework.decorators import action
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
+)
 from rest_framework import status
+from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.viewsets import ModelViewSet
-from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
+
 from apps.core.api import api_response
+
 from .models import Driver
 from .permissions import DriverPermission
 from .serializers import (
+    DriverCreateSerializer,
     DriverDossierSearchQuerySerializer,
     DriverLicenseReadSerializer,
     DriverNIFSearchQuerySerializer,
-    DriverSerializer,
+    DriverUpdateSerializer,
 )
-from .services import build_license_search_result, normalize_dossier_lookup_value, normalize_nif, normalized_dossier_expression, normalized_nif_expression
+from .services import (
+    build_license_search_result,
+    normalize_dossier_lookup_value,
+    normalize_nif,
+    normalized_dossier_expression,
+    normalized_nif_expression,
+)
 
-LICENSE_SEARCH_FIELDS = (
-    "id",
-    "dossier_number",
-    "nif",
-    "full_name",
-    "address",
-    "birth_date",
-    "sex",
-    "blood_group",
-    "license_type",
-    "issue_place",
-    "issue_date",
-    "expires_at",
-    "created_at",
-    "updated_at",
-)
+
+class DriverPagination(PageNumberPagination):
+    page_size = 40
+    page_size_query_param = "page_size"
+    max_page_size = 100
 
 
 @extend_schema_view(
     list=extend_schema(
-        summary="Lister les conducteurs",
-        description="Permission: tout utilisateur authentifie. PUT et DELETE ne sont pas disponibles.",
-        responses={200: DriverSerializer, 401: OpenApiResponse(description="Authentification JWT requise.")},
+        summary="Lister les dossiers conducteurs",
+        description=(
+            "Permission : compte professionnel actif avec rôle ADMIN, "
+            "AGENT_TERRAIN ou AGENT_SAISIE. Pagination de 40 éléments."
+        ),
+        responses={
+            200: DriverLicenseReadSerializer(many=True),
+            401: OpenApiResponse(
+                description="Authentification JWT requise."
+            ),
+            403: OpenApiResponse(
+                description="Compte ou rôle non autorisé."
+            ),
+        },
     ),
     retrieve=extend_schema(
-        summary="Consulter un conducteur",
-        description="Permission: tout utilisateur authentifie.",
+        summary="Consulter un dossier conducteur",
+        description=(
+            "Permission : compte professionnel actif avec rôle autorisé."
+        ),
         responses={
-            200: DriverSerializer,
-            401: OpenApiResponse(description="Authentification JWT requise."),
-            404: OpenApiResponse(description="Introuvable."),
+            200: DriverLicenseReadSerializer,
+            401: OpenApiResponse(
+                description="Authentification JWT requise."
+            ),
+            403: OpenApiResponse(
+                description="Compte ou rôle non autorisé."
+            ),
+            404: OpenApiResponse(description="Dossier introuvable."),
         },
     ),
     create=extend_schema(
-        summary="Creer un conducteur",
-        description="Permission: AGENT_SAISIE uniquement.",
+        summary="Créer un dossier conducteur",
+        description=(
+            "Permission : AGENT_SAISIE uniquement. Fournir soit `person`, "
+            "soit `person_id`."
+        ),
+        request=DriverCreateSerializer,
         responses={
-            201: DriverSerializer,
-            400: OpenApiResponse(description="Donnees invalides."),
-            401: OpenApiResponse(description="Authentification JWT requise."),
-            403: OpenApiResponse(description="Role non autorise."),
+            201: DriverLicenseReadSerializer,
+            400: OpenApiResponse(description="Données invalides."),
+            401: OpenApiResponse(
+                description="Authentification JWT requise."
+            ),
+            403: OpenApiResponse(
+                description="Seul un agent de saisie est autorisé."
+            ),
         },
     ),
     partial_update=extend_schema(
-        summary="Modifier partiellement un conducteur",
-        description="Permission: AGENT_SAISIE uniquement. PUT est indisponible; utilisez PATCH.",
+        summary="Modifier partiellement un dossier conducteur",
+        description=(
+            "Permission : AGENT_SAISIE uniquement. PUT et DELETE ne sont "
+            "pas disponibles."
+        ),
+        request=DriverUpdateSerializer,
         responses={
-            200: DriverSerializer,
-            400: OpenApiResponse(description="Donnees invalides."),
-            401: OpenApiResponse(description="Authentification JWT requise."),
-            403: OpenApiResponse(description="Role non autorise."),
-            404: OpenApiResponse(description="Introuvable."),
+            200: DriverLicenseReadSerializer,
+            400: OpenApiResponse(description="Données invalides."),
+            401: OpenApiResponse(
+                description="Authentification JWT requise."
+            ),
+            403: OpenApiResponse(
+                description="Seul un agent de saisie est autorisé."
+            ),
+            404: OpenApiResponse(description="Dossier introuvable."),
         },
     ),
 )
 class DriverViewSet(ModelViewSet):
-    queryset = Driver.objects.all().order_by("-id")
-    serializer_class = DriverSerializer
     permission_classes = [DriverPermission]
-    http_method_names = ["get", "post", "patch", "head", "options"]
-    filterset_fields = ("dossier_number", "nif", "sex", "blood_group", "license_type")
-    search_fields = ("dossier_number", "nif", "full_name")
+    pagination_class = DriverPagination
+    http_method_names = [
+        "get",
+        "post",
+        "patch",
+        "head",
+        "options",
+    ]
+
+    filterset_fields = (
+        "dossier_number",
+        "person__nif",
+        "sex",
+        "blood_group",
+        "license_type",
+    )
+    search_fields = (
+        "dossier_number",
+        "person__nif",
+        "person__first_name",
+        "person__last_name",
+    )
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        dossier_number = self.request.query_params.get("dossier_number")
-        if dossier_number:
-            queryset = queryset.filter(dossier_number=dossier_number)
-        return queryset
+        return (
+            Driver.objects
+            .select_related("person")
+            .order_by("-id")
+        )
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return DriverCreateSerializer
+
+        if self.action == "partial_update":
+            return DriverUpdateSerializer
+
+        return DriverLicenseReadSerializer
 
     def _not_found_response(self):
         return api_response(
             False,
             "Aucun permis trouvé.",
             {},
-            {"driver_license": ["Aucun permis ne correspond aux informations fournies."]},
+            {
+                "driver_license": [
+                    "Aucun permis ne correspond aux informations fournies."
+                ]
+            },
             status.HTTP_404_NOT_FOUND,
         )
 
     def _license_response(self, drivers):
         drivers = list(drivers)
-        message, data = build_license_search_result(drivers, DriverLicenseReadSerializer)
+
+        message, data = build_license_search_result(
+            drivers,
+            DriverLicenseReadSerializer,
+        )
         data["judicial_alert"] = None
-        if drivers and drivers[0].nif and (
-            data["active_count"] >= 2
-            or data["has_conflict"]
-            or data["unpaid_tickets"]["count"] >= 2
+
+        if (
+            drivers
+            and drivers[0].nif
+            and data["unpaid_tickets"]["count"] >= 2
         ):
             from apps.alerts.services import evaluate_judicial_alert
+
             judicial_alert, _ = evaluate_judicial_alert(
                 nif=drivers[0].nif,
                 actor=self.request.user,
                 unpaid_ticket_count=data["unpaid_tickets"]["count"],
             )
+
             if judicial_alert is not None:
                 data["judicial_alert"] = {
                     "code": "JUDICIAL_ALERT",
                     "level": "CRITICAL",
                     "message": judicial_alert.description,
                 }
-        response = api_response(True, message, data)
+
+        response = api_response(
+            True,
+            message,
+            data,
+        )
         response["Cache-Control"] = "private, no-store"
         return response
 
     def _search_by_dossier_response(self, request):
-        serializer = DriverDossierSearchQuerySerializer(data=request.query_params)
-        if not serializer.is_valid():
+        query_serializer = DriverDossierSearchQuerySerializer(
+            data=request.query_params
+        )
+
+        if not query_serializer.is_valid():
             return api_response(
                 False,
                 "Le numéro de dossier est requis.",
                 {},
-                {"dossier_number": ["Ce paramètre de recherche est obligatoire."]},
+                {
+                    "dossier_number": [
+                        "Ce paramètre de recherche est obligatoire."
+                    ]
+                },
                 status.HTTP_400_BAD_REQUEST,
             )
 
-        dossier_number = normalize_dossier_lookup_value(serializer.validated_data["dossier_number"])
-        drivers = list(
-            Driver.objects.only(*LICENSE_SEARCH_FIELDS)
-            .annotate(normalized_dossier_number=normalized_dossier_expression())
-            .filter(normalized_dossier_number=dossier_number)
-            .order_by("-id")
+        dossier_number = normalize_dossier_lookup_value(
+            query_serializer.validated_data["dossier_number"]
         )
-        if not drivers:
+
+        drivers = (
+            self.get_queryset()
+            .annotate(
+                normalized_dossier_number=(
+                    normalized_dossier_expression()
+                )
+            )
+            .filter(
+                normalized_dossier_number=dossier_number
+            )
+        )
+
+        if not drivers.exists():
             return self._not_found_response()
+
         return self._license_response(drivers)
 
     def _search_by_nif_response(self, request):
-        serializer = DriverNIFSearchQuerySerializer(data=request.query_params)
-        if not serializer.is_valid():
+        query_serializer = DriverNIFSearchQuerySerializer(
+            data=request.query_params
+        )
+
+        if not query_serializer.is_valid():
             return api_response(
                 False,
                 "Le NIF est requis.",
                 {},
-                {"nif": ["Ce paramètre de recherche est obligatoire."]},
+                {
+                    "nif": [
+                        "Ce paramètre de recherche est obligatoire."
+                    ]
+                },
                 status.HTTP_400_BAD_REQUEST,
             )
 
-        nif = normalize_nif(serializer.validated_data["nif"])
-        drivers = list(
-            Driver.objects.only(*LICENSE_SEARCH_FIELDS)
-            .annotate(normalized_nif=normalized_nif_expression())
-            .filter(normalized_nif=nif)
-            .order_by("-issue_date", "-id")
+        nif = normalize_nif(
+            query_serializer.validated_data["nif"]
         )
-        if not drivers:
+
+        drivers = (
+            self.get_queryset()
+            .annotate(
+                normalized_person_nif=(
+                    normalized_nif_expression()
+                )
+            )
+            .filter(normalized_person_nif=nif)
+        )
+
+        if not drivers.exists():
             return self._not_found_response()
+
         return self._license_response(drivers)
 
     @extend_schema(
-        summary="Rechercher un permis par numero de dossier",
-        description="Tous les utilisateurs authentifiés peuvent consulter ce endpoint. Alias historique: /api/drivers/search/.",
+        summary="Rechercher un permis par numéro de dossier",
         parameters=[
             OpenApiParameter(
                 name="dossier_number",
                 required=True,
                 type=str,
                 location=OpenApiParameter.QUERY,
-                examples=[OpenApiExample("Dossier", value="DRV-000124")],
+                examples=[
+                    OpenApiExample(
+                        "Dossier",
+                        value="DRV-000124",
+                    )
+                ],
             )
         ],
         responses={
-            200: OpenApiResponse(description="Permis trouvé. Inclut les permis, conflits et la section unpaid_tickets."),
-            400: OpenApiResponse(description="Paramètre dossier_number absent ou vide."),
-            401: OpenApiResponse(description="Authentification JWT requise."),
-            404: OpenApiResponse(description="Aucun permis trouvé."),
+            200: OpenApiResponse(
+                description=(
+                    "Permis trouvé avec état de validité, tickets impayés "
+                    "et éventuelle alerte judiciaire."
+                )
+            ),
+            400: OpenApiResponse(
+                description="Paramètre absent ou vide."
+            ),
+            401: OpenApiResponse(
+                description="Authentification JWT requise."
+            ),
+            403: OpenApiResponse(
+                description="Compte ou rôle non autorisé."
+            ),
+            404: OpenApiResponse(
+                description="Aucun permis trouvé."
+            ),
         },
-        examples=[
-            OpenApiExample(
-                "Permis trouvé",
-                value={
-                    "success": True,
-                    "message": "Permis trouvé.",
-                    "data": {
-                        "count": 1,
-                        "active_count": 1,
-                        "has_conflict": False,
-                        "alert": None,
-                        "overlapping_license_ids": [],
-                        "licenses": [{"dossier_number": "DRV-000124", "is_currently_valid": True, "validity_state": "VALID"}],
-                        "unpaid_tickets": {"count": 0, "has_unpaid_tickets": False, "alert": None, "items": []},
-                    },
-                    "errors": {},
-                },
-                response_only=True,
-            )
-        ],
     )
     @action(
         detail=False,
@@ -209,10 +320,10 @@ class DriverViewSet(ModelViewSet):
         return self._search_by_dossier_response(request)
 
     @extend_schema(
-        summary="Rechercher des permis par NIF",
+        summary="Rechercher un permis par NIF",
         description=(
-            "Tous les utilisateurs authentifiés peuvent consulter ce endpoint. "
-            "Les espaces et tirets du NIF sont ignorés. Le cas MULTIPLE_ACTIVE_LICENSES est retourné en HTTP 200."
+            "La recherche utilise Person.nif. Les espaces et tirets sont "
+            "ignorés."
         ),
         parameters=[
             OpenApiParameter(
@@ -220,38 +331,29 @@ class DriverViewSet(ModelViewSet):
                 required=True,
                 type=str,
                 location=OpenApiParameter.QUERY,
-                examples=[OpenApiExample("NIF", value="001-234-567-8")],
+                examples=[
+                    OpenApiExample(
+                        "NIF",
+                        value="001-234-567-8",
+                    )
+                ],
             )
         ],
         responses={
-            200: OpenApiResponse(description="Permis trouvés ou alerte métier MULTIPLE_ACTIVE_LICENSES."),
-            400: OpenApiResponse(description="Paramètre nif absent ou vide."),
-            401: OpenApiResponse(description="Authentification JWT requise."),
-            404: OpenApiResponse(description="Aucun permis trouvé."),
+            200: OpenApiResponse(description="Permis trouvé."),
+            400: OpenApiResponse(
+                description="Paramètre absent ou vide."
+            ),
+            401: OpenApiResponse(
+                description="Authentification JWT requise."
+            ),
+            403: OpenApiResponse(
+                description="Compte ou rôle non autorisé."
+            ),
+            404: OpenApiResponse(
+                description="Aucun permis trouvé."
+            ),
         },
-        examples=[
-            OpenApiExample(
-                "Plusieurs permis actifs",
-                value={
-                    "success": True,
-                    "message": "Plusieurs permis actifs ont été détectés pour cette personne.",
-                    "data": {
-                        "count": 2,
-                        "active_count": 2,
-                        "has_conflict": True,
-                        "alert": {
-                            "code": "MULTIPLE_ACTIVE_LICENSES",
-                            "level": "WARNING",
-                            "message": "Plusieurs permis utilisables simultanément sont associés à ce NIF. Une vérification administrative est requise.",
-                        },
-                        "overlapping_license_ids": [12, 18],
-                        "licenses": [],
-                    },
-                    "errors": {},
-                },
-                response_only=True,
-            )
-        ],
     )
     @action(
         detail=False,
@@ -262,8 +364,7 @@ class DriverViewSet(ModelViewSet):
         return self._search_by_nif_response(request)
 
     @extend_schema(
-        summary="Alias historique de recherche par numero de dossier",
-        description="Alias rétrocompatible de /api/drivers/search-by-dossier/.",
+        summary="Alias historique de recherche par dossier",
         deprecated=True,
     )
     @action(

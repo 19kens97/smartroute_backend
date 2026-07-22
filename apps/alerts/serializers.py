@@ -1,6 +1,7 @@
 from django.db import transaction
 from rest_framework import serializers
 
+from apps.accounts.models import AgentProfile
 from apps.media_storage.services import (
     MEDIA_TYPE_AUDIO,
     MEDIA_TYPE_VIDEO,
@@ -9,36 +10,37 @@ from apps.media_storage.services import (
     validate_uploaded_media,
 )
 from apps.vehicles.models import normalize_plate_number
+
 from .models import Alert, AlertEvidence
 
-ENTRY_AGENT_TYPES = {Alert.TYPE_WANTED_VEHICLE, Alert.TYPE_STOLEN_PLATE}
+
 FIELD_AGENT_TYPES = {
-    Alert.TYPE_FIELD_ESCAPE,
-    Alert.TYPE_REFUSED_CONTROL,
-    Alert.TYPE_SUSPICIOUS_BEHAVIOR,
+    Alert.AlertType.FIELD_ESCAPE,
+    Alert.AlertType.REFUSED_CONTROL,
+    Alert.AlertType.SUSPICIOUS_BEHAVIOR,
 }
-SYSTEM_ONLY_TYPES = {Alert.TYPE_JUDICIAL}
-PLATE_REQUIRED_TYPES = {
-    Alert.TYPE_WANTED_VEHICLE,
-    Alert.TYPE_STOLEN_PLATE,
-    Alert.TYPE_JUDICIAL,
+ADMINISTRATIVE_TYPES = {
+    Alert.AlertType.WANTED_VEHICLE,
+    Alert.AlertType.STOLEN_PLATE,
 }
-ALERT_TYPE_LABELS = {
-    Alert.TYPE_FIELD_ESCAPE: "Fuite lors du contrôle",
-    Alert.TYPE_REFUSED_CONTROL: "Refus de contrôle",
-    Alert.TYPE_SUSPICIOUS_BEHAVIOR: "Comportement suspect",
-    Alert.TYPE_WANTED_VEHICLE: "Véhicule volé ou recherché",
-    Alert.TYPE_STOLEN_PLATE: "Plaque volée",
-    Alert.TYPE_JUDICIAL: "Alerte judiciaire",
+SYSTEM_ONLY_TYPES = {
+    Alert.AlertType.JUDICIAL,
+    Alert.AlertType.DOCUMENT_EXPIRY_WARNING,
 }
-ALERT_SEVERITIES = {
-    Alert.TYPE_FIELD_ESCAPE: "CRITICAL",
-    Alert.TYPE_REFUSED_CONTROL: "CRITICAL",
-    Alert.TYPE_SUSPICIOUS_BEHAVIOR: "WARNING",
-    Alert.TYPE_WANTED_VEHICLE: "CRITICAL",
-    Alert.TYPE_STOLEN_PLATE: "CRITICAL",
-    Alert.TYPE_JUDICIAL: "CRITICAL",
-}
+
+
+def agent_role(user):
+    try:
+        return user.agent_profile.role
+    except (AttributeError, AgentProfile.DoesNotExist):
+        return None
+
+
+def display_name(user):
+    if user is None:
+        return None
+    person = getattr(user, "person", None)
+    return getattr(person, "full_name", "") or user.email or user.username
 
 
 class AlertEvidenceSerializer(serializers.ModelSerializer):
@@ -61,85 +63,144 @@ class AlertEvidenceSerializer(serializers.ModelSerializer):
     def get_url(self, obj):
         request = self.context.get("request")
         path = f"/api/alerts/{obj.alert_id}/evidence/{obj.pk}/"
-        return request.build_absolute_uri(path) if request is not None else path
+        return request.build_absolute_uri(path) if request else path
 
 
-class AlertPresentationMixin:
-    def get_alert_type_display(self, obj):
-        return ALERT_TYPE_LABELS.get(obj.alert_type, obj.alert_type)
-
-    def get_severity(self, obj):
-        return ALERT_SEVERITIES.get(obj.alert_type, "INFO")
-
-    def get_is_opened(self, obj):
-        return bool(getattr(obj, "is_opened_for_user", False))
-
-
-
-class AlertListSerializer(AlertPresentationMixin, serializers.ModelSerializer):
-    alert_type_display = serializers.SerializerMethodField()
-    severity = serializers.SerializerMethodField()
+class AlertListSerializer(serializers.ModelSerializer):
+    alert_type_display = serializers.CharField(
+        source="get_alert_type_display",
+        read_only=True,
+    )
+    category_display = serializers.CharField(
+        source="get_category_display",
+        read_only=True,
+    )
     is_opened = serializers.SerializerMethodField()
 
     class Meta:
         model = Alert
         fields = (
             "id",
+            "category",
+            "category_display",
             "alert_type",
             "alert_type_display",
             "severity",
+            "status",
             "plate_number",
             "source",
             "is_opened",
+            "document_expires_on",
+            "expires_at",
             "created_at",
         )
         read_only_fields = fields
 
+    def get_is_opened(self, obj):
+        return bool(getattr(obj, "is_opened_for_user", False))
 
-class AlertSerializer(AlertPresentationMixin, serializers.ModelSerializer):
+
+class AlertSerializer(serializers.ModelSerializer):
+    alert_type_display = serializers.CharField(
+        source="get_alert_type_display",
+        read_only=True,
+    )
+    category_display = serializers.CharField(
+        source="get_category_display",
+        read_only=True,
+    )
+    status_display = serializers.CharField(
+        source="get_status_display",
+        read_only=True,
+    )
     created_by_name = serializers.SerializerMethodField()
-    created_by_role = serializers.CharField(source="created_by.role", read_only=True, allow_null=True)
-    alert_type_display = serializers.SerializerMethodField()
-    severity = serializers.SerializerMethodField()
+    created_by_role = serializers.SerializerMethodField()
     is_opened = serializers.SerializerMethodField()
     evidence = AlertEvidenceSerializer(many=True, read_only=True)
     evidence_type = serializers.ChoiceField(
-        choices=[AlertEvidence.TYPE_AUDIO, AlertEvidence.TYPE_VIDEO],
+        choices=AlertEvidence.EvidenceType.choices,
         write_only=True,
         required=False,
     )
-    evidence_file = serializers.FileField(write_only=True, required=False)
-    evidence_duration_seconds = serializers.IntegerField(write_only=True, required=False, min_value=0)
+    evidence_file = serializers.FileField(
+        write_only=True,
+        required=False,
+    )
+    evidence_duration_seconds = serializers.IntegerField(
+        write_only=True,
+        required=False,
+        min_value=0,
+    )
 
     class Meta:
         model = Alert
         fields = (
-            "id", "alert_type", "alert_type_display", "severity", "plate_number",
-            "description", "created_by", "created_by_name", "created_by_role",
-            "source", "subject_nif", "system_reasons", "control_period_start",
-            "control_period_end", "is_opened", "evidence", "evidence_type",
-            "evidence_file", "evidence_duration_seconds", "created_at", "updated_at",
+            "id",
+            "category",
+            "category_display",
+            "alert_type",
+            "alert_type_display",
+            "severity",
+            "status",
+            "status_display",
+            "vehicle",
+            "plate_number",
+            "description",
+            "created_by",
+            "created_by_name",
+            "created_by_role",
+            "source",
+            "subject_person",
+            "subject_nif",
+            "system_reasons",
+            "control_period_start",
+            "control_period_end",
+            "document_expires_on",
+            "expires_at",
+            "resolved_at",
+            "resolved_by",
+            "resolution_note",
+            "is_opened",
+            "evidence",
+            "evidence_type",
+            "evidence_file",
+            "evidence_duration_seconds",
+            "created_at",
+            "updated_at",
         )
         read_only_fields = (
-            "id", "created_by", "created_by_name", "created_by_role",
-            "alert_type_display", "severity", "source", "subject_nif",
-            "system_reasons", "control_period_start", "control_period_end",
-            "is_opened", "evidence", "created_at", "updated_at",
+            "id",
+            "category",
+            "severity",
+            "status",
+            "created_by",
+            "created_by_name",
+            "created_by_role",
+            "source",
+            "subject_person",
+            "subject_nif",
+            "system_reasons",
+            "control_period_start",
+            "control_period_end",
+            "document_expires_on",
+            "expires_at",
+            "resolved_at",
+            "resolved_by",
+            "resolution_note",
+            "is_opened",
+            "evidence",
+            "created_at",
+            "updated_at",
         )
 
-    def get_fields(self):
-        fields = super().get_fields()
-        if self.instance is not None:
-            fields["alert_type"].required = False
-            fields["evidence_type"].required = False
-            fields["evidence_file"].required = False
-        return fields
-
     def get_created_by_name(self, obj):
-        if obj.created_by is None:
-            return None
-        return obj.created_by.get_full_name().strip() or obj.created_by.username
+        return display_name(obj.created_by)
 
+    def get_created_by_role(self, obj):
+        return agent_role(obj.created_by)
+
+    def get_is_opened(self, obj):
+        return bool(getattr(obj, "is_opened_for_user", False))
 
     def _validate_evidence(self, attrs):
         evidence_file = attrs.get("evidence_file")
@@ -148,12 +209,18 @@ class AlertSerializer(AlertPresentationMixin, serializers.ModelSerializer):
 
         if evidence_file is None and evidence_type is None:
             return
-        if evidence_file is None:
-            raise serializers.ValidationError({"evidence_file": "Le fichier de preuve est requis."})
-        if evidence_type is None:
-            raise serializers.ValidationError({"evidence_type": "Le type de preuve est requis."})
 
-        if evidence_type == AlertEvidence.TYPE_AUDIO:
+        if evidence_file is None:
+            raise serializers.ValidationError(
+                {"evidence_file": "Le fichier de preuve est requis."}
+            )
+
+        if evidence_type is None:
+            raise serializers.ValidationError(
+                {"evidence_type": "Le type de preuve est requis."}
+            )
+
+        if evidence_type == AlertEvidence.EvidenceType.AUDIO:
             metadata = validate_uploaded_media(
                 evidence_file,
                 media_type=MEDIA_TYPE_AUDIO,
@@ -169,41 +236,115 @@ class AlertSerializer(AlertPresentationMixin, serializers.ModelSerializer):
                 field_name="evidence_file",
                 **get_video_limits(),
             )
+
         attrs["evidence_metadata"] = metadata
 
     def validate(self, attrs):
         request = self.context.get("request")
-        user = getattr(request, "user", None)
-        role = getattr(user, "role", None)
+        role = agent_role(getattr(request, "user", None))
         instance = self.instance
         incoming_type = attrs.get("alert_type")
         alert_type = incoming_type or getattr(instance, "alert_type", None)
 
         if instance is None:
             if alert_type in SYSTEM_ONLY_TYPES:
-                raise serializers.ValidationError({"alert_type": "Une alerte judiciaire ne peut être créée que par le système."})
-            allowed_types = ENTRY_AGENT_TYPES if role == "AGENT_SAISIE" else FIELD_AGENT_TYPES if role == "AGENT_TERRAIN" else set()
+                raise serializers.ValidationError(
+                    {
+                        "alert_type": (
+                            "Ce type d'alerte ne peut être créé "
+                            "que par le système."
+                        )
+                    }
+                )
+
+            if role == AgentProfile.Role.AGENT_TERRAIN:
+                allowed_types = FIELD_AGENT_TYPES
+                attrs["category"] = Alert.Category.FIELD_REPORT
+            elif role == AgentProfile.Role.AGENT_SAISIE:
+                allowed_types = ADMINISTRATIVE_TYPES
+                attrs["category"] = Alert.Category.ADMINISTRATIVE
+            else:
+                allowed_types = set()
+
             if alert_type not in allowed_types:
-                raise serializers.ValidationError({"alert_type": "Ce type d'alerte n'est pas autorisé pour votre rôle."})
+                raise serializers.ValidationError(
+                    {
+                        "alert_type": (
+                            "Ce type d'alerte n'est pas autorisé "
+                            "pour votre rôle."
+                        )
+                    }
+                )
         else:
-            if instance.source == Alert.SOURCE_SYSTEM or instance.alert_type == Alert.TYPE_JUDICIAL:
-                raise serializers.ValidationError("Une alerte judiciaire automatique ne peut pas être modifiée manuellement.")
+            if instance.category == Alert.Category.AUTOMATIC:
+                raise serializers.ValidationError(
+                    "Une alerte automatique ne peut pas être modifiée manuellement."
+                )
+
+            if instance.is_terminal:
+                raise serializers.ValidationError(
+                    "Une alerte clôturée ne peut plus être modifiée."
+                )
+
             if incoming_type is not None and incoming_type != instance.alert_type:
-                raise serializers.ValidationError({"alert_type": "Le type d'une alerte existante ne peut pas être modifié."})
-            if attrs.get("evidence_file") is not None or attrs.get("evidence_type") is not None:
-                raise serializers.ValidationError({"evidence_file": "La preuve ne peut être ajoutée qu'à la création de l'alerte."})
+                raise serializers.ValidationError(
+                    {
+                        "alert_type": (
+                            "Le type d'une alerte existante "
+                            "ne peut pas être modifié."
+                        )
+                    }
+                )
 
-        plate_number = normalize_plate_number(attrs.get("plate_number", getattr(instance, "plate_number", "")))
-        if alert_type in PLATE_REQUIRED_TYPES and not plate_number:
-            raise serializers.ValidationError({"plate_number": "Le numéro d'immatriculation est obligatoire pour ce type d'alerte."})
-        if len(plate_number) > 20:
-            raise serializers.ValidationError({"plate_number": "Le numéro d'immatriculation ne peut pas dépasser 20 caractères."})
+            if (
+                attrs.get("evidence_file") is not None
+                or attrs.get("evidence_type") is not None
+            ):
+                raise serializers.ValidationError(
+                    {
+                        "evidence_file": (
+                            "Une preuve ne peut être ajoutée "
+                            "qu'à la création."
+                        )
+                    }
+                )
+
+        plate = normalize_plate_number(
+            attrs.get(
+                "plate_number",
+                getattr(instance, "plate_number", ""),
+            )
+        )
+
+        if alert_type in ADMINISTRATIVE_TYPES and not plate:
+            raise serializers.ValidationError(
+                {
+                    "plate_number": (
+                        "Le numéro d'immatriculation est obligatoire."
+                    )
+                }
+            )
+
         if "plate_number" in attrs or instance is None:
-            attrs["plate_number"] = plate_number
+            attrs["plate_number"] = plate
 
-        description = str(attrs.get("description", getattr(instance, "description", ""))).strip()
+        description = str(
+            attrs.get(
+                "description",
+                getattr(instance, "description", ""),
+            )
+        ).strip()
+
         if instance is None and len(description) < 10:
-            raise serializers.ValidationError({"description": "La description doit contenir au moins 10 caractères."})
+            raise serializers.ValidationError(
+                {
+                    "description": (
+                        "La description doit contenir "
+                        "au moins 10 caractères."
+                    )
+                }
+            )
+
         if "description" in attrs or instance is None:
             attrs["description"] = description
 
@@ -214,18 +355,46 @@ class AlertSerializer(AlertPresentationMixin, serializers.ModelSerializer):
     def create(self, validated_data):
         evidence_file = validated_data.pop("evidence_file", None)
         evidence_type = validated_data.pop("evidence_type", None)
-        duration = validated_data.pop("evidence_duration_seconds", None)
-        evidence_metadata = validated_data.pop("evidence_metadata", {})
+        duration = validated_data.pop(
+            "evidence_duration_seconds",
+            None,
+        )
+        metadata = validated_data.pop("evidence_metadata", {})
+
         alert = Alert.objects.create(**validated_data)
+
         if evidence_file is not None and evidence_type is not None:
             AlertEvidence.objects.create(
                 alert=alert,
                 evidence_type=evidence_type,
                 file=evidence_file,
-                mime_type=evidence_metadata.get("mime_type", getattr(evidence_file, "content_type", "") or ""),
-                size_bytes=evidence_metadata.get("size_bytes", getattr(evidence_file, "size", None)),
-                checksum_sha256=evidence_metadata.get("checksum_sha256", ""),
+                mime_type=metadata.get(
+                    "mime_type",
+                    getattr(evidence_file, "content_type", "") or "",
+                ),
+                size_bytes=metadata.get(
+                    "size_bytes",
+                    getattr(evidence_file, "size", None),
+                ),
+                checksum_sha256=metadata.get("checksum_sha256", ""),
                 duration_seconds=duration,
                 created_by=validated_data["created_by"],
             )
+
         return alert
+
+
+class AlertCloseSerializer(serializers.Serializer):
+    note = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        max_length=500,
+    )
+
+    def validate_note(self, value):
+        value = value.strip()
+        if len(value) < 5:
+            raise serializers.ValidationError(
+                "La justification doit contenir au moins 5 caractères."
+            )
+        return value

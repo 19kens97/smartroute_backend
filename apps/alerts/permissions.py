@@ -1,20 +1,68 @@
-﻿from rest_framework.permissions import BasePermission
+from rest_framework.permissions import BasePermission
+
+from apps.accounts.models import AgentProfile, User
 
 
 class AlertPermission(BasePermission):
-    READ_ACTIONS = {"list", "retrieve", "recent_unread", "mark_opened", "evidence"}
-    WRITE_ACTIONS = {"update", "partial_update"}
+    message = "Vous n'êtes pas autorisé à effectuer cette opération."
+
+    READ_ACTIONS = frozenset(
+        {
+            "list",
+            "retrieve",
+            "recent_unread",
+            "mark_opened",
+            "evidence",
+        }
+    )
+    MANAGE_ACTIONS = frozenset(
+        {
+            "partial_update",
+            "resolve",
+            "cancel",
+        }
+    )
+
+    def _profile(self, user):
+        if not (
+            user
+            and user.is_authenticated
+            and user.is_active
+            and user.account_type == User.AccountType.PROFESSIONAL
+        ):
+            return None
+
+        try:
+            profile = user.agent_profile
+        except AgentProfile.DoesNotExist:
+            return None
+
+        return profile if profile.is_active else None
 
     def has_permission(self, request, view):
-        if not (request.user and request.user.is_authenticated):
+        profile = self._profile(request.user)
+        if profile is None:
             return False
-        role = getattr(request.user, "role", None)
-        if view.action in self.READ_ACTIONS:
-            return True
-        if view.action == "create":
-            return role in {"AGENT_SAISIE", "AGENT_TERRAIN"}
-        if view.action in self.WRITE_ACTIONS:
-            return role == "AGENT_SAISIE"
-        if view.action == "destroy":
-            return True
+
+        action = getattr(view, "action", None)
+
+        if action in self.READ_ACTIONS:
+            return profile.role in {
+                AgentProfile.Role.ADMIN,
+                AgentProfile.Role.AGENT_TERRAIN,
+                AgentProfile.Role.AGENT_SAISIE,
+            }
+
+        if action == "create":
+            return profile.role in {
+                AgentProfile.Role.AGENT_TERRAIN,
+                AgentProfile.Role.AGENT_SAISIE,
+            }
+
+        if action in self.MANAGE_ACTIONS:
+            return profile.role in {
+                AgentProfile.Role.ADMIN,
+                AgentProfile.Role.AGENT_SAISIE,
+            }
+
         return False

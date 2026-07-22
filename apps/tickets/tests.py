@@ -1,230 +1,238 @@
-import os
-import shutil
-import tempfile
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.core.files.base import ContentFile
-from django.utils.dateparse import parse_datetime
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import override_settings
-from unittest.mock import patch
-from django.utils import timezone
+from django.test import TestCase
 from rest_framework.test import APITestCase
 
+from apps.accounts.models import AgentProfile, Person
 from apps.infractions.models import Infraction
-from apps.core.models import AuditLog
-from .models import Ticket, TicketInfraction, TicketProof
-from .services import TICKET_NUMBER_MAX_ATTEMPTS, generate_unique_ticket_number
+
+from .models import Ticket, TicketInfraction, TicketVerbalization
+from .services import find_open_ticket
 
 
-class TicketApiTests(APITestCase):
-    def setUp(self):
+class TicketTestMixin:
+    password = "Pass1234!Secure"
+
+    def professional(self, email, role, badge):
         User = get_user_model()
-        self.media_root = tempfile.mkdtemp()
-        self.signature_storage = User._meta.get_field("signature_file").storage
-        self.original_signature_location = self.signature_storage._location
-        self.signature_storage._location = self.media_root
-        self.signature_storage.__dict__.pop("base_location", None)
-        self.signature_storage.__dict__.pop("location", None)
-        self.terrain = User.objects.create_user(username="terrain", password="Pass1234!", role="AGENT_TERRAIN", first_name="Agent", last_name="Terrain", badge_number="AGT-1")
-        self.other_terrain = User.objects.create_user(username="terrain2", password="Pass1234!", role="AGENT_TERRAIN")
-        self.saisie = User.objects.create_user(username="saisie", password="Pass1234!", role="AGENT_SAISIE")
-        self.admin = User.objects.create_user(username="admin", password="Pass1234!", role="ADMIN")
-        token = self.client.post("/api/auth/token/", {"username": "terrain", "password": "Pass1234!"}, format="json").data["access"]
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
-        self.inf = Infraction.objects.create(code="I001", label="Test", amount=100)
+        person = Person.objects.create(
+            nif=badge,
+            first_name=role,
+            last_name="Tickets",
+        )
+        user = User.objects.create_user(
+            person=person,
+            account_type=User.AccountType.PROFESSIONAL,
+            email=email,
+            password=self.password,
+        )
+        AgentProfile.objects.create(
+            user=user,
+            role=role,
+            badge_number=badge,
+            is_active=True,
+        )
+        return user
 
-    def tearDown(self):
-        self.signature_storage._location = self.original_signature_location
-        self.signature_storage.__dict__.pop("base_location", None)
-        self.signature_storage.__dict__.pop("location", None)
-        shutil.rmtree(self.media_root, ignore_errors=True)
+    def fixed_infraction(self):
+        return Infraction.objects.create(
+            code="I001",
+            number=1,
+            label="Infraction fixe",
+            official_label="Infraction fixe",
+            category=Infraction.Category.CIRCULATION,
+            penalty_type=Infraction.PenaltyType.FIXED,
+            amount=Decimal("1000.00"),
+            penalty_text="1000",
+            currency="HTG",
+            display_order=1,
+        )
 
-    def create_ticket(self):
-        return Ticket.objects.create(agent=self.terrain, driver_license="D1", plate_number_snapshot="AA1")
 
-    def test_ticket_create_requires_infraction(self):
-        r = self.client.post("/api/tickets/", {"driver_license": "D1", "plate_number_snapshot": "AA1", "infraction_codes": []}, format="json")
-        self.assertEqual(r.status_code, 400)
+class TicketModelTests(TicketTestMixin, TestCase):
+    def setUp(self):
+        self.agent = self.professional(
+            "model.field@example.com",
+            AgentProfile.Role.AGENT_TERRAIN,
+            "TCK-MOD-001",
+        )
+        self.infraction = self.fixed_infraction()
 
-    def test_ticket_create_with_infraction(self):
-        r = self.client.post("/api/tickets/", {"driver_license": "D1", "driver_name_snapshot": "Jean Test", "plate_number_snapshot": "AA1", "infraction_codes": [self.inf.code]}, format="json")
-        self.assertEqual(r.status_code, 201)
-        self.assertEqual(r.data["driver_license"], "D1")
-        self.assertEqual(r.data["driver_name_snapshot"], "Jean Test")
-        self.assertEqual(r.data["plate_number_snapshot"], "AA1")
-        self.assertEqual(r.data["infractions"][0]["id"], self.inf.id)
-        self.assertRegex(r.data["ticket_number"], r"^[0-9A-F]{8}$")
-        self.assertTrue(Ticket.objects.filter(id=r.data["id"], ticket_number=r.data["ticket_number"], agent=self.terrain).exists())
-        self.assertTrue(TicketInfraction.objects.filter(ticket_id=r.data["id"], infraction=self.inf).exists())
-        self.assertEqual(r.data["status"], Ticket.STATUS_VALIDATED)
+    def test_ticket_generates_number_and_barcode_value(self):
+        ticket = Ticket.objects.create(
+            opened_by=self.agent,
+            driver_dossier_snapshot="D-100",
+        )
+        self.assertRegex(ticket.ticket_number, r"^[0-9A-F]{8}$")
+        self.assertEqual(ticket.barcode_value, f"PV:{ticket.ticket_number}")
 
-    def test_ticket_number_is_unique_and_read_only(self):
-        first = self.client.post("/api/tickets/", {"driver_license": "D1", "plate_number_snapshot": "AA1", "infraction_codes": [self.inf.code], "ticket_number": "ABCDEF12"}, format="json")
-        second = self.client.post("/api/tickets/", {"driver_license": "D2", "plate_number_snapshot": "BB2", "infraction_codes": [self.inf.code]}, format="json")
-        self.assertEqual(first.status_code, 201)
-        self.assertEqual(second.status_code, 201)
-        self.assertNotEqual(first.data["ticket_number"], "ABCDEF12")
-        self.assertNotEqual(first.data["ticket_number"], second.data["ticket_number"])
-        patch_response = self.client.patch(f"/api/tickets/{first.data['id']}/", {"ticket_number": "ABCDEF12"}, format="json")
-        self.assertEqual(patch_response.status_code, 200)
-        self.assertEqual(patch_response.data["ticket_number"], first.data["ticket_number"])
+    def test_infraction_snapshot_is_informational_without_selected_amount(self):
+        ticket = Ticket.objects.create(
+            opened_by=self.agent,
+            driver_dossier_snapshot="D-100",
+        )
+        verbalization = TicketVerbalization.objects.create(
+            ticket=ticket,
+            sequence_number=1,
+            agent=self.agent,
+            plate_number_snapshot="HT-100",
+        )
+        link = TicketInfraction.objects.create(
+            verbalization=verbalization,
+            infraction=self.infraction,
+        )
+        self.assertEqual(link.amount_snapshot, Decimal("1000.00"))
+        self.assertFalse(hasattr(link, "selected_amount"))
 
-    def test_ticket_number_collision_retry(self):
-        existing = Ticket.objects.create(agent=self.terrain, driver_license="D0", plate_number_snapshot="AA0", ticket_number="ABCDEF12")
-        with patch("apps.tickets.services.secrets.token_hex", side_effect=["abcdef12", "0001a9cf"]):
-            value = generate_unique_ticket_number()
-        self.assertEqual(existing.ticket_number, "ABCDEF12")
-        self.assertEqual(value, "0001A9CF")
+    def test_open_ticket_is_found_by_dossier(self):
+        ticket = Ticket.objects.create(
+            opened_by=self.agent,
+            driver_dossier_snapshot="D-100",
+        )
+        self.assertEqual(
+            find_open_ticket(dossier_number="d-100"),
+            ticket,
+        )
 
-    def test_ticket_number_generation_stops_after_max_attempts(self):
-        Ticket.objects.create(agent=self.terrain, driver_license="D0", plate_number_snapshot="AA0", ticket_number="ABCDEF12")
-        with patch("apps.tickets.services.secrets.token_hex", return_value="abcdef12"):
-            with self.assertRaises(RuntimeError):
-                generate_unique_ticket_number()
-        self.assertEqual(TICKET_NUMBER_MAX_ATTEMPTS, 10)
 
-    def test_ticket_create_rejects_invalid_infraction_id(self):
-        r = self.client.post("/api/tickets/", {"driver_license": "D1", "plate_number_snapshot": "AA1", "infraction_codes": ["I999"]}, format="json")
-        self.assertEqual(r.status_code, 400)
+class TicketApiTests(TicketTestMixin, APITestCase):
+    def setUp(self):
+        self.field = self.professional(
+            "ticket.field@example.com",
+            AgentProfile.Role.AGENT_TERRAIN,
+            "TCK-TER-001",
+        )
+        self.other_field = self.professional(
+            "ticket.other@example.com",
+            AgentProfile.Role.AGENT_TERRAIN,
+            "TCK-TER-002",
+        )
+        self.entry = self.professional(
+            "ticket.entry@example.com",
+            AgentProfile.Role.AGENT_SAISIE,
+            "TCK-SAI-001",
+        )
+        self.admin = self.professional(
+            "ticket.admin@example.com",
+            AgentProfile.Role.ADMIN,
+            "TCK-ADM-001",
+        )
+        self.infraction = self.fixed_infraction()
 
-    def test_ticket_create_persists_control_context_and_barcode(self):
-        occurred_at = "2026-07-01T14:35:22-04:00"
+    def auth(self, user):
+        self.client.force_authenticate(user=user)
+
+    def create_payload(self):
+        return {
+            "driver_dossier_snapshot": "D-100",
+            "first_verbalization": {
+                "plate_number_snapshot": "HT-100",
+                "location_label": "Delmas 33",
+                "infraction_codes": [self.infraction.code],
+            },
+        }
+
+    def test_field_agent_creates_ticket_with_first_verbalization(self):
+        self.auth(self.field)
         response = self.client.post(
             "/api/tickets/",
-            {
-                "driver_license": "D1",
-                "plate_number_snapshot": "AA1",
-                "infraction_codes": [self.inf.code],
-                "occurred_at": occurred_at,
-                "location_label": "Delmas 33",
-                "latitude": "18.543210",
-                "longitude": "-72.321000",
-            },
+            self.create_payload(),
             format="json",
         )
         self.assertEqual(response.status_code, 201)
-        self.assertRegex(response.data["ticket_number"], r"^[0-9A-F]{8}$")
-        self.assertEqual(response.data["location_label"], "Delmas 33")
-        self.assertEqual(parse_datetime(response.data["occurred_at"]).isoformat(), parse_datetime(occurred_at).isoformat())
+        ticket = Ticket.objects.get(pk=response.data["id"])
+        self.assertEqual(ticket.status, Ticket.Status.OPEN)
+        self.assertEqual(ticket.verbalizations.count(), 1)
+        self.assertEqual(ticket.verbalizations.first().sequence_number, 1)
 
-    def test_ticket_receipt_without_proofs_returns_empty_list(self):
-        response = self.client.post("/api/tickets/", {"driver_license": "D1", "plate_number_snapshot": "AA1", "infraction_codes": [self.inf.code]}, format="json")
-        detail = self.client.get(f"/api/tickets/{response.data['id']}/")
-        self.assertEqual(detail.status_code, 200)
-        self.assertEqual(detail.data["proofs"], [])
+    def test_second_control_adds_verbalization_to_open_ticket(self):
+        self.auth(self.field)
+        created = self.client.post(
+            "/api/tickets/",
+            self.create_payload(),
+            format="json",
+        )
+        ticket_id = created.data["id"]
 
-    def test_receipt_agent_without_signature_uses_full_name_metadata(self):
-        response = self.client.post("/api/tickets/", {"driver_license": "D1", "plate_number_snapshot": "AA1", "infraction_codes": [self.inf.code]}, format="json")
-        detail = self.client.get(f"/api/tickets/{response.data['id']}/")
-        self.assertEqual(detail.status_code, 200)
-        self.assertEqual(detail.data["agent_detail"]["full_name"], "Agent Terrain")
-        self.assertFalse(detail.data["agent_detail"]["has_signature"])
-        self.assertIsNone(detail.data["agent_signature_url"])
-
-    def test_ticket_proof_accepts_png_photo(self):
-        ticket = self.create_ticket()
-        upload = SimpleUploadedFile("photo.png", b"photo", content_type="image/png")
-        response = self.client.post(f"/api/tickets/{ticket.id}/proofs/", {"file": upload, "evidence_type": "PHOTO"}, format="multipart")
+        self.auth(self.other_field)
+        response = self.client.post(
+            f"/api/tickets/{ticket_id}/verbalizations/",
+            {
+                "plate_number_snapshot": "HT-200",
+                "location_label": "Pétion-Ville",
+                "infraction_codes": [self.infraction.code],
+            },
+            format="json",
+        )
         self.assertEqual(response.status_code, 200)
-        data = response.data["data"]
-        proof = TicketProof.objects.get(ticket=ticket)
-        self.assertEqual(data["mime_type"], "image/png")
-        self.assertEqual(data["size_bytes"], 5)
-        self.assertEqual(len(data["checksum_sha256"]), 64)
-        self.assertNotIn("file", data)
-        self.assertIn(f"/api/tickets/{ticket.id}/proofs/{proof.id}/download/", data["url"])
-        self.assertTrue(proof.file.name.startswith(f"tickets/{ticket.ticket_number}/photos/"))
-        self.assertNotIn("photo.png", proof.file.name)
-        self.assertEqual(proof.created_by, self.terrain)
-        download = self.client.get(f"/api/tickets/{ticket.id}/proofs/{proof.id}/download/")
-        self.assertEqual(download.status_code, 200)
-        self.assertEqual(download.get("Cache-Control"), "private, no-store")
+        self.assertEqual(response.data["data"]["sequence_number"], 2)
+        self.assertEqual(response.data["data"]["agent"], self.other_field.pk)
+        self.assertEqual(TicketVerbalization.objects.filter(ticket_id=ticket_id).count(), 2)
 
-    def test_ticket_proof_rejects_empty_file(self):
-        ticket = self.create_ticket()
-        upload = SimpleUploadedFile("photo.jpg", b"", content_type="image/jpeg")
-        response = self.client.post(f"/api/tickets/{ticket.id}/proofs/", {"file": upload, "evidence_type": "PHOTO"}, format="multipart")
+    def test_closed_ticket_rejects_new_verbalization(self):
+        ticket = Ticket.objects.create(
+            opened_by=self.field,
+            driver_dossier_snapshot="D-100",
+        )
+        TicketVerbalization.objects.create(
+            ticket=ticket,
+            sequence_number=1,
+            agent=self.field,
+            plate_number_snapshot="HT-100",
+        )
+        ticket.status = Ticket.Status.CLOSED
+        ticket.closed_by = self.admin
+        ticket.closure_reason = "Dossier régularisé."
+        ticket.save()
+
+        self.auth(self.field)
+        response = self.client.post(
+            f"/api/tickets/{ticket.pk}/verbalizations/",
+            {
+                "plate_number_snapshot": "HT-200",
+                "infraction_codes": [self.infraction.code],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_barcode_endpoint_returns_svg(self):
+        ticket = Ticket.objects.create(
+            opened_by=self.field,
+            driver_dossier_snapshot="D-100",
+        )
+        self.auth(self.field)
+        response = self.client.get(f"/api/tickets/{ticket.pk}/barcode/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/svg+xml")
+
+    def test_api_does_not_accept_selected_amount(self):
+        self.auth(self.field)
+        payload = self.create_payload()
+        payload["first_verbalization"]["selected_amount"] = "1000.00"
+        response = self.client.post("/api/tickets/", payload, format="json")
         self.assertEqual(response.status_code, 400)
 
-    def test_agent_terrain_cannot_update_other_agent_ticket(self):
-        ticket = Ticket.objects.create(agent=self.other_terrain, driver_license="DX", plate_number_snapshot="BB2")
-        r = self.client.patch(f"/api/tickets/{ticket.id}/", {"status": "ISSUED"}, format="json")
-        self.assertEqual(r.status_code, 403)
+    def test_only_admin_closes_ticket(self):
+        ticket = Ticket.objects.create(
+            opened_by=self.field,
+            driver_dossier_snapshot="D-100",
+        )
+        self.auth(self.entry)
+        denied = self.client.post(
+            f"/api/tickets/{ticket.pk}/close/",
+            {"reason": "Dossier traité."},
+            format="json",
+        )
+        self.assertEqual(denied.status_code, 403)
 
-    def test_agent_saisie_can_patch_ticket(self):
-        ticket = Ticket.objects.create(agent=self.terrain, driver_license="D1", plate_number_snapshot="AA1")
-        token = self.client.post("/api/auth/token/", {"username": "saisie", "password": "Pass1234!"}, format="json").data["access"]
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
-        r = self.client.patch(f"/api/tickets/{ticket.id}/", {"status": "PENDING_SYNC"}, format="json")
-        self.assertEqual(r.status_code, 200)
-
-    def test_only_admin_can_cancel_ticket_and_cancellation_is_audited(self):
-        ticket = self.create_ticket()
-        saisie_token = self.client.post("/api/auth/token/", {"username": "saisie", "password": "Pass1234!"}, format="json").data["access"]
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {saisie_token}")
-        denied = self.client.patch(f"/api/tickets/{ticket.id}/", {"status": Ticket.STATUS_CANCELLED}, format="json")
-        self.assertEqual(denied.status_code, 400)
+        self.auth(self.admin)
+        accepted = self.client.post(
+            f"/api/tickets/{ticket.pk}/close/",
+            {"reason": "Dossier régularisé."},
+            format="json",
+        )
+        self.assertEqual(accepted.status_code, 200)
         ticket.refresh_from_db()
-        self.assertEqual(ticket.status, Ticket.STATUS_VALIDATED)
-
-        admin_token = self.client.post("/api/auth/token/", {"username": "admin", "password": "Pass1234!"}, format="json").data["access"]
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {admin_token}")
-        cancelled = self.client.patch(f"/api/tickets/{ticket.id}/", {"status": Ticket.STATUS_CANCELLED}, format="json")
-        self.assertEqual(cancelled.status_code, 200)
-        self.assertEqual(cancelled.data["status"], Ticket.STATUS_CANCELLED)
-        self.assertTrue(AuditLog.objects.filter(
-            actor=self.admin,
-            model_name="Ticket",
-            object_id=str(ticket.id),
-            action="STATUS_CHANGE",
-            payload={"from": Ticket.STATUS_VALIDATED, "to": Ticket.STATUS_CANCELLED},
-        ).exists())
-
-    def test_ticket_accepts_photo_video_and_audio_proofs(self):
-        ticket = self.create_ticket()
-        cases = [
-            ("PHOTO", "photo.jpg", "image/jpeg", b"photo"),
-            ("VIDEO", "video.mp4", "video/mp4", b"video"),
-            ("AUDIO", "audio.m4a", "audio/mp4", b"audio"),
-        ]
-        for evidence_type, name, content_type, content in cases:
-            upload = SimpleUploadedFile(name, content, content_type=content_type)
-            response = self.client.post(
-                f"/api/tickets/{ticket.id}/proofs/",
-                {"file": upload, "evidence_type": evidence_type, "duration_seconds": 5},
-                format="multipart",
-            )
-            self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.data["data"]["evidence_type"], evidence_type)
-        self.assertEqual(TicketProof.objects.filter(ticket=ticket).count(), 3)
-
-    def test_ticket_proof_rejects_invalid_mime(self):
-        ticket = self.create_ticket()
-        upload = SimpleUploadedFile("photo.jpg", b"not-photo", content_type="application/pdf")
-        response = self.client.post(f"/api/tickets/{ticket.id}/proofs/", {"file": upload, "evidence_type": "PHOTO"}, format="multipart")
-        self.assertEqual(response.status_code, 400)
-
-    @override_settings(SECURE_UPLOAD_MAX_MB=0)
-    def test_ticket_proof_rejects_too_large_photo(self):
-        ticket = self.create_ticket()
-        upload = SimpleUploadedFile("photo.jpg", b"x", content_type="image/jpeg")
-        response = self.client.post(f"/api/tickets/{ticket.id}/proofs/", {"file": upload, "evidence_type": "PHOTO"}, format="multipart")
-        self.assertEqual(response.status_code, 400)
-
-    def test_receipt_detail_exposes_agent_signature_url_and_signature_file(self):
-        self.terrain.signature_file.save("signature.png", ContentFile(b"signature"), save=False)
-        self.terrain.signature_updated_at = timezone.now()
-        self.terrain.save(update_fields=["signature_file", "signature_updated_at"])
-        response = self.client.post("/api/tickets/", {"driver_license": "D1", "plate_number_snapshot": "AA1", "infraction_codes": [self.inf.code]}, format="json")
-        ticket_id = response.data["id"]
-        detail = self.client.get(f"/api/tickets/{ticket_id}/")
-        self.assertEqual(detail.status_code, 200)
-        self.assertTrue(detail.data["agent_detail"]["has_signature"])
-        self.assertIn(f"/api/tickets/{ticket_id}/agent-signature/", detail.data["agent_signature_url"])
-        signature = self.client.get(f"/api/tickets/{ticket_id}/agent-signature/")
-        self.assertEqual(signature.status_code, 200)
-        self.assertEqual(signature.get("Content-Type"), "image/png")
-
-
-
+        self.assertEqual(ticket.status, Ticket.Status.CLOSED)

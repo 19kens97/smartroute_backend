@@ -1,10 +1,123 @@
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import ValidationError
+from rest_framework.response import Response
 from rest_framework.views import APIView
-from apps.core.api import api_response
-from apps.tickets.models import Ticket
 
-class TicketsReportView(APIView):
-    permission_classes = [IsAuthenticated]
+from apps.core.api import api_response
+
+from .pagination import ReportsPagination
+from .permissions import ReportsPermission
+from .serializers import (
+    AgentReportSerializer,
+    DelitReportSerializer,
+    InfractionReportSerializer,
+    TicketReportSerializer,
+    VerbalizationReportSerializer,
+)
+from .services import (
+    build_summary,
+    get_agent_report_queryset,
+    get_delit_report_queryset,
+    get_infraction_report_queryset,
+    get_ticket_report_queryset,
+    get_verbalization_report_queryset,
+    serialize_agent_row,
+    serialize_delit_row,
+    serialize_infraction_row,
+    serialize_ticket_row,
+    serialize_verbalization_row,
+)
+
+
+class BaseReportView(APIView):
+    permission_classes = [ReportsPermission]
+    pagination_class = ReportsPagination
+
+    def paginate(self, request, queryset, serializer_class, row_builder):
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        rows = [row_builder(item) for item in page]
+        serializer = serializer_class(rows, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    def run_report(
+        self,
+        request,
+        queryset_builder,
+        serializer_class,
+        row_builder,
+    ):
+        try:
+            queryset = queryset_builder(request.query_params)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError({"filters": str(exc)}) from exc
+
+        return self.paginate(
+            request,
+            queryset,
+            serializer_class,
+            row_builder,
+        )
+
+
+class ReportsSummaryView(BaseReportView):
     def get(self, request):
-        data = list(Ticket.objects.values("id", "status", "driver_license", "plate_number_snapshot", "created_at")[:100])
-        return api_response(True, "Tickets report", {"results": data})
+        try:
+            data = build_summary(request.query_params)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError({"filters": str(exc)}) from exc
+
+        return api_response(
+            True,
+            "Résumé des rapports.",
+            data,
+        )
+
+
+class TicketsReportView(BaseReportView):
+    def get(self, request):
+        return self.run_report(
+            request,
+            get_ticket_report_queryset,
+            TicketReportSerializer,
+            serialize_ticket_row,
+        )
+
+
+class VerbalizationsReportView(BaseReportView):
+    def get(self, request):
+        return self.run_report(
+            request,
+            get_verbalization_report_queryset,
+            VerbalizationReportSerializer,
+            serialize_verbalization_row,
+        )
+
+
+class InfractionsReportView(BaseReportView):
+    def get(self, request):
+        return self.run_report(
+            request,
+            get_infraction_report_queryset,
+            InfractionReportSerializer,
+            serialize_infraction_row,
+        )
+
+
+class DelitsReportView(BaseReportView):
+    def get(self, request):
+        return self.run_report(
+            request,
+            get_delit_report_queryset,
+            DelitReportSerializer,
+            serialize_delit_row,
+        )
+
+
+class AgentsReportView(BaseReportView):
+    def get(self, request):
+        return self.run_report(
+            request,
+            get_agent_report_queryset,
+            AgentReportSerializer,
+            serialize_agent_row,
+        )

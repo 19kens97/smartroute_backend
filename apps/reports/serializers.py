@@ -1,0 +1,87 @@
+from rest_framework import serializers
+
+
+class TicketReportSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    ticket_number = serializers.CharField()
+    barcode_value = serializers.CharField()
+    driver_id = serializers.IntegerField(allow_null=True)
+    driver_dossier_snapshot = serializers.CharField()
+    driver_name_snapshot = serializers.CharField()
+    driver_nif_snapshot = serializers.CharField()
+    status = serializers.CharField()
+    sync_status = serializers.CharField()
+    pricing_status = serializers.CharField()
+    opened_at = serializers.DateTimeField()
+    opened_by_id = serializers.IntegerField()
+    opened_by_name = serializers.CharField()
+    verbalization_count = serializers.IntegerField()
+    first_verbalization_at = serializers.DateTimeField(allow_null=True)
+    last_verbalization_at = serializers.DateTimeField(allow_null=True)
+    last_plate_number = serializers.CharField(allow_blank=True)
+    last_location_label = serializers.CharField(allow_blank=True)
+
+
+class VerbalizationReportSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    ticket_id = serializers.IntegerField()
+    ticket_number = serializers.CharField()
+    sequence_number = serializers.IntegerField()
+    agent_id = serializers.IntegerField()
+    agent_name = serializers.CharField()
+    agent_badge_number = serializers.CharField(allow_blank=True)
+    driver_dossier_snapshot = serializers.CharField()
+    driver_name_snapshot = serializers.CharField()
+    vehicle_id = serializers.IntegerField(allow_null=True)
+    plate_number_snapshot = serializers.CharField()
+    occurred_at = serializers.DateTimeField()
+    location_label = serializers.CharField()
+    status = serializers.CharField()
+    infraction_count = serializers.IntegerField()
+    proof_count = serializers.IntegerField()
+
+
+class InfractionReportSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    label = serializers.CharField()
+    article = serializers.CharField()
+    penalty_type = serializers.CharField()
+    currency = serializers.CharField()
+    observation_count = serializers.IntegerField()
+    ticket_count = serializers.IntegerField()
+    verbalization_count = serializers.IntegerField()
+    last_observed_at = serializers.DateTimeField(allow_null=True)
+
+
+class DelitReportSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    case_number = serializers.CharField()
+    delit_type_code = serializers.CharField()
+    delit_type_label = serializers.CharField()
+    source_type = serializers.CharField()
+    qualification_status = serializers.CharField()
+    procedure_status = serializers.CharField()
+    driver_id = serializers.IntegerField(allow_null=True)
+    vehicle_id = serializers.IntegerField(allow_null=True)
+    ticket_id = serializers.IntegerField(allow_null=True)
+    verbalization_id = serializers.IntegerField(allow_null=True)
+    scan_id = serializers.IntegerField(allow_null=True)
+    detected_at = serializers.DateTimeField()
+    detected_by_id = serializers.IntegerField()
+    detected_by_name = serializers.CharField()
+    location_label = serializers.CharField()
+    evidence_count = serializers.IntegerField()
+    action_count = serializers.IntegerField()
+
+
+class AgentReportSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+    full_name = serializers.CharField()
+    email = serializers.EmailField()
+    badge_number = serializers.CharField()
+    role = serializers.CharField()
+    tickets_opened = serializers.IntegerField()
+    verbalizations_created = serializers.IntegerField()
+    proofs_added = serializers.IntegerField()
+    delit_cases_created = serializers.IntegerField()
+    delit_actions_recorded = serializers.IntegerField()

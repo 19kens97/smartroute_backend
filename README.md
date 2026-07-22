@@ -180,7 +180,7 @@ Le module `apps.media_storage.services` centralise les chemins, la validation MI
 - signatures agents : `signatures/agents/{agent_id}/{uuid}.png`
 - documents vehicule : `documents/vehicles/{vehicle_id}/{uuid}.{ext}`
 
-Configuration principale : `MEDIA_STORAGE_BACKEND`, `MEDIA_ROOT`, `MEDIA_URL`, `MEDIA_BASE_URL`, `PRIVATE_MEDIA_ENABLED`, `PRIVATE_SIGNATURE_ROOT`, `PRIVATE_ALERT_EVIDENCE_ROOT`, `MAX_IMAGE_SIZE_MB`, `MAX_VIDEO_SIZE_MB`, `MAX_AUDIO_SIZE_MB`, `MAX_DOCUMENT_SIZE_MB`. En developpement, `config.urls` sert `MEDIA_URL` lorsque `DEBUG=True`; les medias sensibles utilisent de preference des endpoints authentifies.
+Configuration principale : `MEDIA_STORAGE_BACKEND`, `MEDIA_ROOT`, `MEDIA_URL`, `MEDIA_BASE_URL`, `PRIVATE_MEDIA_ENABLED`, `PRIVATE_SIGNATURE_ROOT`, `PRIVATE_ALERT_EVIDENCE_ROOT`, `PRIVATE_TICKET_PROOF_ROOT`, `PRIVATE_DELIT_EVIDENCE_ROOT`, `MAX_IMAGE_SIZE_MB`, `MAX_VIDEO_SIZE_MB`, `MAX_AUDIO_SIZE_MB`, `MAX_DOCUMENT_SIZE_MB`. En developpement, `config.urls` sert `MEDIA_URL` lorsque `DEBUG=True`; les medias sensibles utilisent de preference des endpoints authentifies.
 
 Les endpoints multipart existants restent les points d'entree :
 

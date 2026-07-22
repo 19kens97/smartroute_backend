@@ -1,24 +1,65 @@
 from rest_framework.permissions import BasePermission
 
+from apps.accounts.models import AgentProfile, User
+
 
 class DriverPermission(BasePermission):
-    READ_ACTIONS = {
-        "list",
-        "retrieve",
-        "search",
-        "search_by_dossier",
-        "search_by_nif",
-    }
-    WRITE_ACTIONS = {"create", "partial_update"}
-    DISABLED_ACTIONS = {"update", "destroy"}
+    """
+    Permissions de l'application drivers.
+
+    Lecture :
+    - ADMIN ;
+    - AGENT_TERRAIN ;
+    - AGENT_SAISIE.
+
+    Écriture POST/PATCH :
+    - AGENT_SAISIE uniquement.
+
+    PUT et DELETE ne sont pas exposés par le ViewSet.
+    """
+
+    message = "Vous n'êtes pas autorisé à effectuer cette opération."
+
+    READ_ACTIONS = frozenset(
+        {
+            "list",
+            "retrieve",
+            "search",
+            "search_by_dossier",
+            "search_by_nif",
+        }
+    )
+    WRITE_ACTIONS = frozenset({"create", "partial_update"})
 
     def has_permission(self, request, view):
-        if not (request.user and request.user.is_authenticated):
+        user = request.user
+
+        if not (
+            user
+            and user.is_authenticated
+            and user.is_active
+            and user.account_type == User.AccountType.PROFESSIONAL
+        ):
             return False
-        if view.action in self.READ_ACTIONS:
-            return True
-        if view.action in self.WRITE_ACTIONS:
-            return request.user.role == "AGENT_SAISIE"
-        if view.action in self.DISABLED_ACTIONS:
-            return True
+
+        try:
+            profile = user.agent_profile
+        except AgentProfile.DoesNotExist:
+            return False
+
+        if not profile.is_active:
+            return False
+
+        action = getattr(view, "action", None)
+
+        if action in self.READ_ACTIONS:
+            return profile.role in {
+                AgentProfile.Role.ADMIN,
+                AgentProfile.Role.AGENT_TERRAIN,
+                AgentProfile.Role.AGENT_SAISIE,
+            }
+
+        if action in self.WRITE_ACTIONS:
+            return profile.role == AgentProfile.Role.AGENT_SAISIE
+
         return False

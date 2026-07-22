@@ -11,11 +11,7 @@ class InsurancePolicyReadSerializer(
         source="vehicle.plate_number",
         read_only=True,
     )
-    owner_name = serializers.CharField(
-        source="vehicle.owner.full_name",
-        read_only=True,
-        allow_null=True,
-    )
+    owner_name = serializers.SerializerMethodField()
     is_currently_valid = serializers.BooleanField(
         read_only=True,
     )
@@ -42,6 +38,11 @@ class InsurancePolicyReadSerializer(
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_owner_name(self, obj):
+        vehicle = getattr(obj, "vehicle", None)
+        owner = getattr(vehicle, "owner", None) if vehicle else None
+        return getattr(owner, "full_name", None) if owner else None
 
 
 class InsurancePolicyWriteSerializer(

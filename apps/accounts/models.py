@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 
 from django.conf import settings
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, UserManager
 from django.core.exceptions import ValidationError
 from django.core.files.storage import FileSystemStorage
 from django.db import models
@@ -23,6 +23,26 @@ class PrivateSignatureStorage(FileSystemStorage):
 
 private_signature_storage = PrivateSignatureStorage()
 
+
+class SmartRouteUserManager(UserManager):
+    def create_user(self, username=None, email=None, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", False)
+        extra_fields.setdefault("is_superuser", False)
+        return self._create_user(username, email, password, **extra_fields)
+
+    def create_superuser(self, username=None, email=None, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        if extra_fields.get("is_staff") is not True:
+            raise ValueError("Superuser must have is_staff=True.")
+        if extra_fields.get("is_superuser") is not True:
+            raise ValueError("Superuser must have is_superuser=True.")
+        return self._create_user(username, email, password, **extra_fields)
+
+    def _create_user(self, username=None, email=None, password=None, **extra_fields):
+        if not username:
+            username = User().generate_internal_username()
+        return super()._create_user(username, email, password, **extra_fields)
 
 class Person(TimeStampedModel):
     """Identité civile centrale de SmartRoute."""
@@ -103,6 +123,8 @@ class Person(TimeStampedModel):
 
 
 class User(AbstractUser):
+    objects = SmartRouteUserManager()
+
     """Compte de connexion lié à une identité civile."""
 
     class AccountType(models.TextChoices):

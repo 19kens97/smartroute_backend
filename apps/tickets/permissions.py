@@ -11,6 +11,7 @@ class TicketPermission(BasePermission):
         "list",
         "retrieve",
         "find_open",
+        "barcode",
         "proof_download",
         "agent_signature",
     })

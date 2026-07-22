@@ -9,6 +9,28 @@ from apps.core.models import AuditLog
 from apps.owners.models import Owner
 
 from .models import Vehicle
+
+def create_owner(*, nif, first_name, last_name, created_by=None):
+    User = get_user_model()
+    person = Person.objects.create(
+        nif=nif,
+        first_name=first_name,
+        last_name=last_name,
+    )
+    if created_by is None:
+        creator_person = Person.objects.create(
+            nif=f"CREATOR-{nif}",
+            first_name="Agent",
+            last_name="Createur",
+        )
+        created_by = User.objects.create_user(
+            person=creator_person,
+            account_type=User.AccountType.PROFESSIONAL,
+            email=f"creator-{nif.lower()}@example.com",
+            password="Pass1234!Secure",
+        )
+    return Owner.objects.create(person=person, created_by=created_by)
+
 from .serializers import (
     VehicleReadSerializer,
     VehicleWriteSerializer,
@@ -17,9 +39,10 @@ from .serializers import (
 
 class VehicleModelAndSerializerTests(TestCase):
     def setUp(self):
-        self.owner = Owner.objects.create(
-            full_name="Marie Jean",
-            national_id="OWNER-001",
+        self.owner = create_owner(
+            nif="OWNER-001",
+            first_name="Marie",
+            last_name="Jean",
         )
 
     def test_year_before_1900_is_rejected(self):
@@ -138,9 +161,11 @@ class VehicleApiTests(APITestCase):
         )
         self.personal = self._create_personal_user()
 
-        self.owner = Owner.objects.create(
-            full_name="Paul Pierre",
-            national_id="OWNER-API-001",
+        self.owner = create_owner(
+            nif="OWNER-API-001",
+            first_name="Paul",
+            last_name="Pierre",
+            created_by=self.entry,
         )
         self.vehicle = Vehicle.objects.create(
             plate_number="HT-12345",

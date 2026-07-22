@@ -1,11 +1,9 @@
 from io import BytesIO
 
 from django.db import transaction
-from django.db.models import Count, Q
 from django.http import FileResponse, Http404, HttpResponse
 from django.utils import timezone
-from reportlab.graphics.barcode import code128
-from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.barcode import createBarcodeDrawing
 from reportlab.graphics import renderSVG
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -70,13 +68,6 @@ class TicketViewSet(ModelViewSet):
                 "verbalizations__vehicle",
                 "verbalizations__infractions__infraction",
                 "verbalizations__proofs",
-            )
-            .annotate(
-                verbalization_count=Count(
-                    "verbalizations",
-                    filter=Q(verbalizations__status=TicketVerbalization.Status.ACTIVE),
-                    distinct=True,
-                )
             )
             .order_by("-opened_at", "-id")
         )
@@ -266,9 +257,12 @@ class TicketViewSet(ModelViewSet):
     @action(detail=True, methods=["get"], url_path="barcode")
     def barcode(self, request, pk=None):
         ticket = self.get_object()
-        barcode = code128.Code128(ticket.barcode_value, barHeight=44, barWidth=1.1)
-        drawing = Drawing(barcode.width + 20, barcode.height + 20)
-        drawing.add(barcode)
+        drawing = createBarcodeDrawing(
+            "Code128",
+            value=ticket.barcode_value,
+            barHeight=44,
+            barWidth=1.1,
+        )
         content = renderSVG.drawToString(drawing)
         response = HttpResponse(content, content_type="image/svg+xml")
         response["Cache-Control"] = "private, max-age=3600"

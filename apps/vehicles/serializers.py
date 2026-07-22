@@ -10,11 +10,7 @@ from .models import (
 
 
 class VehicleReadSerializer(serializers.ModelSerializer):
-    owner_name = serializers.CharField(
-        source="owner.full_name",
-        read_only=True,
-        allow_null=True,
-    )
+    owner_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Vehicle
@@ -34,6 +30,10 @@ class VehicleReadSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_owner_name(self, obj):
+        owner = getattr(obj, "owner", None)
+        return getattr(owner, "full_name", None) if owner else None
 
 
 class VehicleWriteSerializer(serializers.ModelSerializer):

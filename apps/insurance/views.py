@@ -140,7 +140,9 @@ class InsurancePolicyViewSet(ModelViewSet):
         "policy_number",
         "insurer",
         "vehicle__plate_number",
-        "vehicle__owner__full_name",
+        "vehicle__owner__person__first_name",
+        "vehicle__owner__person__last_name",
+        "vehicle__owner__person__nif",
     )
 
     def get_queryset(self):
@@ -151,6 +153,7 @@ class InsurancePolicyViewSet(ModelViewSet):
             .select_related(
                 "vehicle",
                 "vehicle__owner",
+                "vehicle__owner__person",
             )
             .annotate(
                 status_priority=Case(

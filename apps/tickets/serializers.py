@@ -103,7 +103,7 @@ class TicketProofSerializer(serializers.ModelSerializer):
 
 
 class TicketInfractionReadSerializer(serializers.ModelSerializer):
-    infraction_id = serializers.IntegerField(source="infraction_id", read_only=True)
+    infraction_id = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = TicketInfraction
@@ -142,6 +142,12 @@ class VerbalizationInputSerializer(serializers.Serializer):
         allow_empty=False,
     )
 
+    def to_internal_value(self, data):
+        if "selected_amount" in data:
+            raise serializers.ValidationError(
+                {"selected_amount": "Le montant choisi n'est plus accepte sur une verbalisation."}
+            )
+        return super().to_internal_value(data)
     def validate_infraction_codes(self, value):
         normalized = [str(code).strip().upper() for code in value]
         if any(not code for code in normalized):
@@ -159,6 +165,10 @@ class VerbalizationInputSerializer(serializers.Serializer):
         return normalized
 
     def validate(self, attrs):
+        if "selected_amount" in getattr(self, "initial_data", {}):
+            raise serializers.ValidationError(
+                {"selected_amount": "Le montant choisi n'est plus accepte sur une verbalisation."}
+            )
         vehicle = attrs.get("vehicle")
         plate = str(attrs.get("plate_number_snapshot") or "").strip()
         if vehicle is None and not plate:

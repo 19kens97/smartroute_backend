@@ -67,3 +67,5 @@ Thumbs.db
 *.bak
 *.swp
 *.swo
+
+private/

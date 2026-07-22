@@ -128,13 +128,15 @@ class VehicleViewSet(ModelViewSet):
         "brand",
         "model",
         "engine_number",
-        "owner__full_name",
+        "owner__person__first_name",
+        "owner__person__last_name",
+        "owner__person__nif",
     )
 
     def get_queryset(self):
         return (
             Vehicle.objects
-            .select_related("owner")
+            .select_related("owner", "owner__person")
             .order_by("-created_at", "-id")
         )
 

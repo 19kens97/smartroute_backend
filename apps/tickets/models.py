@@ -298,8 +298,7 @@ class TicketInfraction(models.Model):
         ]
         ordering = ("id",)
 
-    def clean(self):
-        super().clean()
+    def populate_snapshots(self):
         if self.infraction_id:
             self.code_snapshot = self.infraction.code
             self.label_snapshot = self.infraction.label
@@ -312,7 +311,12 @@ class TicketInfraction(models.Model):
             self.penalty_text_snapshot = self.infraction.penalty_text
             self.currency_snapshot = self.infraction.currency
 
+    def clean(self):
+        super().clean()
+        self.populate_snapshots()
+
     def save(self, *args, **kwargs):
+        self.populate_snapshots()
         self.full_clean()
         super().save(*args, **kwargs)
 

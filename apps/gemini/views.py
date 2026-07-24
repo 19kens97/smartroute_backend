@@ -75,15 +75,16 @@ def get_vehicle_by_plate(plate_number_display: str):
         return None
     compact = normalize_plate_candidate(plate_number_display)
     candidates = {plate_number_display, compact, format_plate_display(compact)}
-    return Vehicle.objects.select_related("owner").filter(plate_number__in=candidates).first()
+    return Vehicle.objects.select_related("owner", "owner__person").filter(plate_number__in=candidates).first()
 
 
 def serialize_owner(owner):
     if owner is None:
         return None
+    person = getattr(owner, "person", None)
     full_name = getattr(owner, "full_name", "") or ""
     return {
-        "nif": getattr(owner, "national_id", ""),
+        "nif": getattr(person, "nif", "") or getattr(owner, "nif", "") or "",
         "nom": full_name,
         "prenom": "",
         "adresse": getattr(owner, "address", ""),
@@ -143,7 +144,7 @@ def build_documents_style_payload(vehicle):
             "compagnie": latest_insurance.insurer,
             "date_emission": None,
             "date_expiration": format_date(latest_insurance.valid_until),
-            "est_active": latest_insurance.status == InsurancePolicy.STATUS_VALID,
+            "est_active": latest_insurance.status == InsurancePolicy.Status.VALID,
         }
         if latest_insurance
         else None,
@@ -161,13 +162,28 @@ def build_documents_style_payload(vehicle):
 def build_vehicle_tickets_payload(vehicle):
     if vehicle is None:
         return {"summary": {"total": 0, "en_cours": 0, "regle": 0}, "items": []}
-    tickets_qs = Ticket.objects.select_related("vehicle", "agent").prefetch_related("ticket_infractions__infraction", "proofs").filter(vehicle=vehicle).order_by("-created_at")
+
+    tickets_qs = (
+        Ticket.objects
+        .select_related("driver", "driver__person", "opened_by", "opened_by__person")
+        .prefetch_related(
+            "verbalizations__agent",
+            "verbalizations__agent__person",
+            "verbalizations__agent__agent_profile",
+            "verbalizations__vehicle",
+            "verbalizations__infractions__infraction",
+            "verbalizations__proofs",
+        )
+        .filter(verbalizations__vehicle=vehicle)
+        .distinct()
+        .order_by("-opened_at", "-id")
+    )
     tickets_data = TicketSerializer(tickets_qs, many=True).data
     return {
         "summary": {
             "total": len(tickets_data),
-            "en_cours": sum(1 for item in tickets_data if item.get("status") in {"DRAFT", "PENDING_SYNC", "ISSUED"}),
-            "regle": sum(1 for item in tickets_data if item.get("status") in {"VALIDATED", "PAID"}),
+            "en_cours": sum(1 for item in tickets_data if item.get("status") == Ticket.Status.OPEN),
+            "regle": sum(1 for item in tickets_data if item.get("status") == Ticket.Status.CLOSED),
         },
         "items": tickets_data,
     }
@@ -304,7 +320,7 @@ def extract_license_plate(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_last_scan(request):
-    last_scan = GeminiScan.objects.select_related("vehicle", "vehicle__owner").filter(agent=request.user).order_by("-scanned_at").first()
+    last_scan = GeminiScan.objects.select_related("vehicle", "vehicle__owner", "vehicle__owner__person").filter(agent=request.user).order_by("-scanned_at").first()
     if not last_scan:
         return JsonResponse({"status": "error", "message": "Aucun scan disponible pour le moment."}, status=404)
     return JsonResponse(build_scan_response(last_scan, last_scan.vehicle))

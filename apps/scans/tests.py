@@ -1,9 +1,11 @@
-from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from rest_framework.test import APITestCase
 from unittest.mock import patch, MagicMock
 from django.urls import resolve, Resolver404
+
+from apps.accounts.test_factories import create_agent_terrain_user, create_person
 
 SCAN_PLATE_PATH = "/api/scans/scan-plate/"
 
@@ -20,8 +22,7 @@ class GeminiScanAPITests(APITestCase):
             resolve("/api/scan-plate/")
 
     def setUp(self):
-        User = get_user_model()
-        self.user = User.objects.create_user(username="tester", password="pass")
+        self.user = create_agent_terrain_user(email="tester@example.com", password="pass", badge_number="SCAN-001")
         self.client.force_authenticate(user=self.user)
 
     @patch("google.genai.Client")
@@ -107,10 +108,10 @@ class GeminiScanAPITests(APITestCase):
         self.assertEqual(data.get("status"), "success")
         self.assertEqual(data.get("plate_number"), "CC-33333")
         self.assertIsNotNone(data.get("vehicle"))
-        self.assertEqual(data["vehicle"]["plate_number"], "CC-33333")
+        self.assertEqual(data["vehicle"]["plate_number"], "CC33333")
 
         scan = GeminiScan.objects.first()
-        self.assertEqual(scan.vehicle.plate_number, "CC-33333")
+        self.assertEqual(scan.vehicle.plate_number, "CC33333")
 
     def test_search_plate_returns_scan_result_payload(self):
         from apps.scans.models import Scan
@@ -151,14 +152,15 @@ class GeminiScanAPITests(APITestCase):
         from apps.scans.models import GeminiScan
         from apps.vehicles.models import Vehicle
 
-        owner = Owner.objects.create(full_name="Marie Jean", national_id="NIF-001", phone="37000000", address="Delmas")
+        owner_person = create_person(nif="NIF-001", first_name="Marie", last_name="Jean")
+        owner = Owner.objects.create(person=owner_person, phone="37000000", address="Delmas", created_by=self.user)
         vehicle = Vehicle.objects.create(plate_number="DD44444", owner=owner, brand="Nissan", model="Patrol", color="Noir", year=2020)
         InsurancePolicy.objects.create(
             vehicle=vehicle,
             insurer="AssurHaiti",
             policy_number="POL-444",
             valid_until=timezone.localdate() + timedelta(days=30),
-            status=InsurancePolicy.STATUS_VALID,
+            status=InsurancePolicy.Status.VALID,
         )
         mock_client = MagicMock()
         mock_response = MagicMock(text="DD44444")
@@ -172,6 +174,8 @@ class GeminiScanAPITests(APITestCase):
         data = resp.json()
         self.assertEqual(data["model_used"], "gemini-2.5-flash")
         self.assertEqual(data["documents"]["proprietaire"]["nom"], "Marie Jean")
+        self.assertEqual(data["documents"]["proprietaire"]["nif"], "NIF001")
+        self.assertEqual(data["vehicle"]["owner"]["nif"], "NIF001")
         self.assertEqual(data["documents"]["assurance"]["numero_police"], "POL-444")
         scan = GeminiScan.objects.get()
         self.assertEqual(scan.agent, self.user)
@@ -179,12 +183,37 @@ class GeminiScanAPITests(APITestCase):
         self.assertEqual(scan.vehicle, vehicle)
 
     def test_search_plate_returns_real_tickets(self):
-        from apps.tickets.models import Ticket
+        from decimal import Decimal
+        from apps.infractions.models import Infraction
+        from apps.tickets.models import Ticket, TicketInfraction, TicketProof, TicketVerbalization
         from apps.vehicles.models import Vehicle
 
         vehicle = Vehicle.objects.create(plate_number="TT55555", brand="Kia")
-        Ticket.objects.create(agent=self.user, vehicle=vehicle, driver_license="DRV-1", plate_number_snapshot="TT-55555", status="PENDING_SYNC")
-        Ticket.objects.create(agent=self.user, vehicle=vehicle, driver_license="DRV-2", plate_number_snapshot="TT-55555", status="VALIDATED")
+        infraction = Infraction.objects.create(
+            code="SCAN-TICKET",
+            number=901,
+            label="Controle scan",
+            penalty_type=Infraction.PenaltyType.FIXED,
+            amount=Decimal("500.00"),
+        )
+        open_ticket = Ticket.objects.create(opened_by=self.user, driver_dossier_snapshot="DRV-1")
+        first = TicketVerbalization.objects.create(ticket=open_ticket, sequence_number=1, agent=self.user, vehicle=vehicle, plate_number_snapshot="TT-55555")
+        TicketInfraction.objects.create(verbalization=first, infraction=infraction)
+        second = TicketVerbalization.objects.create(ticket=open_ticket, sequence_number=2, agent=self.user, vehicle=vehicle, plate_number_snapshot="TT-55555")
+        TicketProof.objects.create(
+            verbalization=second,
+            file=SimpleUploadedFile("proof.jpg", b"proof-image", content_type="image/jpeg"),
+            evidence_type=TicketProof.EvidenceType.PHOTO,
+            mime_type="image/jpeg",
+            size_bytes=len(b"proof-image"),
+            created_by=self.user,
+        )
+        closed_ticket = Ticket.objects.create(opened_by=self.user, driver_dossier_snapshot="DRV-2")
+        TicketVerbalization.objects.create(ticket=closed_ticket, sequence_number=1, agent=self.user, vehicle=vehicle, plate_number_snapshot="TT-55555")
+        closed_ticket.status = Ticket.Status.CLOSED
+        closed_ticket.closed_by = self.user
+        closed_ticket.closure_reason = "Dossier regle"
+        closed_ticket.save()
 
         resp = self.client.get("/api/scans/search/?plate_number=TT-55555")
 
@@ -192,12 +221,19 @@ class GeminiScanAPITests(APITestCase):
         data = resp.json()
         self.assertEqual(data["tickets"]["summary"], {"total": 2, "en_cours": 1, "regle": 1})
         self.assertEqual(len(data["tickets"]["items"]), 2)
+        self.assertEqual(set(data.keys()) & {"status", "message", "plate_number", "vehicle", "documents", "tickets"}, {"status", "plate_number", "vehicle", "documents", "tickets"})
+
+        open_item = next(item for item in data["tickets"]["items"] if item["status"] == Ticket.Status.OPEN)
+        self.assertEqual(len(open_item["verbalizations"]), 2)
+        self.assertEqual(open_item["verbalizations"][0]["infractions"][0]["code_snapshot"], "SCAN-TICKET")
+        self.assertEqual(open_item["verbalizations"][0]["proofs"], [])
+        self.assertEqual(len(open_item["verbalizations"][1]["proofs"]), 1)
+        self.assertEqual(open_item["verbalizations"][1]["proofs"][0]["evidence_type"], TicketProof.EvidenceType.PHOTO)
 
     def test_last_scan_is_scoped_to_authenticated_user_and_ordered(self):
         from apps.scans.models import GeminiScan
 
-        User = get_user_model()
-        other = User.objects.create_user(username="other", password="pass")
+        other = create_agent_terrain_user(email="other@example.com", password="pass", badge_number="SCAN-OTHER")
         GeminiScan.objects.create(agent=other, plate_number="OTHER-1", model_used="gemini-test", plate_detected=True)
         GeminiScan.objects.create(agent=self.user, plate_number="FIRST-1", model_used="gemini-test", plate_detected=True)
         latest = GeminiScan.objects.create(agent=self.user, plate_number="LATEST-1", model_used="gemini-test", plate_detected=True)
@@ -221,8 +257,7 @@ class GeminiScanAPITests(APITestCase):
     def test_scan_history_contains_only_current_user_records_and_protected_image(self):
         from apps.scans.models import GeminiScan, Scan
 
-        User = get_user_model()
-        other = User.objects.create_user(username="history-other", password="pass")
+        other = create_agent_terrain_user(email="history-other@example.com", password="pass", badge_number="SCAN-HIST")
         Scan.objects.create(agent=self.user, plate_number="MANUAL-1", source="MANUAL")
         own_scan = GeminiScan.objects.create(
             agent=self.user,
@@ -243,6 +278,10 @@ class GeminiScanAPITests(APITestCase):
         self.assertEqual({record["plate_number"] for record in records}, {"MANUAL-1", "CAMERA-1"})
         camera_record = next(record for record in records if record["plate_number"] == "CAMERA-1")
         self.assertEqual(camera_record["image_url"], f"/api/scans/history/{own_scan.pk}/image/")
+        self.assertNotIn(settings.MEDIA_URL, camera_record["image_url"])
+        self.assertEqual(str(own_scan.image.storage.location), str(settings.PRIVATE_SCAN_ROOT))
+        with self.assertRaises(ValueError):
+            own_scan.image.url
 
         image = self.client.get(camera_record["image_url"])
         self.assertEqual(image.status_code, 200)
@@ -250,6 +289,11 @@ class GeminiScanAPITests(APITestCase):
         self.assertEqual(b"".join(image.streaming_content), b"scan-photo")
         denied = self.client.get(f"/api/scans/history/{other_scan.pk}/image/")
         self.assertEqual(denied.status_code, 404)
+
+        self.client.force_authenticate(user=None)
+        unauthenticated = self.client.get(camera_record["image_url"])
+        self.assertEqual(unauthenticated.status_code, 401)
+        self.client.force_authenticate(user=self.user)
 
         own_scan.image.delete(save=False)
         other_scan.image.delete(save=False)

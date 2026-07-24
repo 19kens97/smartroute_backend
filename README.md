@@ -36,6 +36,25 @@ Variables principales, sans secrets reels:
 | `GEMINI_MODEL` | Non | Modele OCR principal | `gemini-2.5-flash` |
 | `GEMINI_FALLBACK_MODELS` | Non | Modeles fallback | `gemini-2.0-flash` |
 
+
+## Configuration Production
+
+Pour un deploiement production, definissez explicitement `DJANGO_SETTINGS_MODULE=config.settings.prod`. Les valeurs de developpement ne doivent pas etre reutilisees telles quelles. Le module production refuse de demarrer si `SECRET_KEY` est vide ou placeholder, si `DEBUG=True`, si `ALLOWED_HOSTS` contient `*`, si `CORS_ALLOW_ALL_ORIGINS=True`, ou si `API_RESPONSE_LOGGING_INCLUDE_BODY=True`.
+
+Exemple minimal :
+
+```env
+DJANGO_SETTINGS_MODULE=config.settings.prod
+DEBUG=False
+SECRET_KEY=<secret-long-aleatoire-fourni-par-le-coffre>
+ALLOWED_HOSTS=api.smartroute.example
+CORS_ALLOW_ALL_ORIGINS=False
+CORS_ALLOWED_ORIGINS=https://admin.smartroute.example
+API_RESPONSE_LOGGING_INCLUDE_BODY=False
+```
+
+`config.settings.prod` active aussi HTTPS redirect, HSTS, cookies secure, `SECURE_CONTENT_TYPE_NOSNIFF`, `SECURE_REFERRER_POLICY=same-origin` et `X_FRAME_OPTIONS=DENY`. Le reverse proxy doit donc terminer HTTPS correctement et transmettre `X-Forwarded-Proto: https`.
+
 ## Modules Et APIs
 
 ### Authentification
@@ -120,6 +139,24 @@ Autres routes scan: `GET /api/scans/search/?plate_number=...`, `GET /api/scans/l
 
 - `POST /api/sync/push/`, `POST /api/sync/pull/`, `GET /api/sync/status/?client_uuid=...`.
 - `GET /api/reports/tickets/` pour les rapports PV.
+
+
+## Validation locale Windows
+
+Depuis le dossier `smartroute_backend`, utilisez toujours le venv local pour les commandes Django afin d'eviter d'utiliser le Python global :
+
+```powershell
+.\venv\Scripts\activate
+python manage.py check
+python manage.py test
+```
+
+Alternative sans activation :
+
+```powershell
+.\venv\Scripts\python.exe manage.py check
+.\venv\Scripts\python.exe manage.py test
+```
 
 ## Tests
 

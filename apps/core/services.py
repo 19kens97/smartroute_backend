@@ -119,4 +119,5 @@ def log_action(
         request=request,
         payload=payload,
         success=success,
+        commit_on_success=False,
     )

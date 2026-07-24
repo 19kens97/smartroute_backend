@@ -6,6 +6,7 @@ from apps.core.models import AuditLog
 from apps.core.services import create_audit_log
 
 from .models import Owner, VehicleOwnership
+from .services import set_current_vehicle_owner
 
 
 class PersonInputSerializer(serializers.Serializer):
@@ -285,70 +286,19 @@ class VehicleOwnershipSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         request = self.context["request"]
-        vehicle = validated_data["vehicle"]
-        start_date = validated_data["start_date"]
-
-        current = (
-            VehicleOwnership.objects
-            .select_for_update()
-            .filter(vehicle=vehicle, is_current=True)
-            .first()
-        )
-
-        if current:
-            if current.owner_id == validated_data["owner"].id:
-                raise serializers.ValidationError(
-                    {
-                        "vehicle": (
-                            "Ce propriétaire est déjà le propriétaire "
-                            "actuel du véhicule."
-                        )
-                    }
-                )
-
-            if start_date < current.start_date:
-                raise serializers.ValidationError(
-                    {
-                        "start_date": (
-                            "La nouvelle propriété ne peut pas commencer "
-                            "avant la propriété actuelle."
-                        )
-                    }
-                )
-
-            current.is_current = False
-            current.end_date = start_date
-            current.ended_by = request.user
-            current.save()
-
-            create_audit_log(
-                actor=request.user,
-                action=AuditLog.Action.STATUS_CHANGE,
-                instance=current,
-                request=request,
-                payload={
-                    "is_current": False,
-                    "end_date": str(start_date),
-                },
-            )
-
-        ownership = VehicleOwnership.objects.create(
+        return set_current_vehicle_owner(
+            vehicle=validated_data["vehicle"],
+            owner=validated_data["owner"],
+            ownership_type=validated_data.get("ownership_type"),
+            start_date=validated_data.get("start_date"),
+            source_document_reference=validated_data.get(
+                "source_document_reference",
+                "",
+            ),
+            note=validated_data.get("note", ""),
             created_by=request.user,
-            is_current=True,
-            **validated_data,
         )
 
-        create_audit_log(
-            actor=request.user,
-            action=AuditLog.Action.CREATE,
-            instance=ownership,
-            request=request,
-            payload={
-                "vehicle_id": vehicle.id,
-                "owner_id": ownership.owner_id,
-            },
-        )
-        return ownership
 
 
 class EndVehicleOwnershipSerializer(serializers.Serializer):

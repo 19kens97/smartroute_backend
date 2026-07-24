@@ -169,7 +169,7 @@ class DocumentViewSet(ModelViewSet):
             or Path(document.file.name).name
         )
 
-        return FileResponse(
+        response = FileResponse(
             document.file,
             as_attachment=True,
             filename=filename,
@@ -178,3 +178,5 @@ class DocumentViewSet(ModelViewSet):
                 or "application/octet-stream"
             ),
         )
+        response["Cache-Control"] = "private, no-store"
+        return response

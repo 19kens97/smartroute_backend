@@ -1,6 +1,8 @@
 from django.db.models import Q
 from rest_framework import serializers
 
+from apps.owners.services import set_current_vehicle_owner
+
 from .models import (
     Vehicle,
     normalize_engine_number,
@@ -97,6 +99,53 @@ class VehicleWriteSerializer(serializers.ModelSerializer):
 
     def validate_engine_number(self, value):
         return normalize_engine_number(value)
+
+
+    def _ownership_actor(self):
+        request = self.context.get("request")
+        return getattr(request, "user", None) if request else None
+
+    def create(self, validated_data):
+        owner = validated_data.pop("owner", None)
+        vehicle = Vehicle.objects.create(**validated_data)
+        if owner is not None:
+            set_current_vehicle_owner(
+                vehicle=vehicle,
+                owner=owner,
+                created_by=self._ownership_actor(),
+            )
+            vehicle.refresh_from_db(fields=("owner", "updated_at"))
+        return vehicle
+
+    def update(self, instance, validated_data):
+        owner_was_provided = "owner" in validated_data
+        owner = validated_data.pop("owner", None)
+
+        if owner_was_provided and owner is None:
+            raise serializers.ValidationError(
+                {
+                    "owner": (
+                        "Utilisez l'historique de propriete pour terminer "
+                        "une propriete; owner ne peut pas etre vide ici."
+                    )
+                }
+            )
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        if validated_data:
+            instance.save()
+
+        if owner_was_provided:
+            set_current_vehicle_owner(
+                vehicle=instance,
+                owner=owner,
+                created_by=self._ownership_actor(),
+            )
+            instance.refresh_from_db(fields=("owner", "updated_at"))
+
+        return instance
 
     def to_representation(self, instance):
         return VehicleReadSerializer(

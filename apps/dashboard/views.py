@@ -74,11 +74,11 @@ class DashboardSummaryView(APIView):
 
         scans_total = sum(item["scans"] for item in daily_activity)
         tickets_total = sum(item["tickets"] for item in daily_activity)
-        infraction_total = TicketInfraction.objects.filter(ticket__created_at__gte=start_dt, ticket__created_at__lt=end_dt).count()
+        infraction_total = TicketInfraction.objects.filter(verbalization__ticket__created_at__gte=start_dt, verbalization__ticket__created_at__lt=end_dt).count()
         pending_sync = SyncSession.objects.exclude(status=SyncSession.Status.SUCCESS).count()
 
         top_rows = list(
-            TicketInfraction.objects.filter(ticket__created_at__gte=start_dt, ticket__created_at__lt=end_dt)
+            TicketInfraction.objects.filter(verbalization__ticket__created_at__gte=start_dt, verbalization__ticket__created_at__lt=end_dt)
             .values("infraction_id", "infraction__code", "infraction__label")
             .annotate(count=Count("id"))
             .order_by("-count", "infraction__code")[:5]

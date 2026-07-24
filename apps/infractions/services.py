@@ -146,10 +146,14 @@ def parse_penalty(item):
         text,
     )
     if multiple_match:
-        options = [
-            value.strip().replace(",", ".")
-            for value in text.split("/")
-        ]
+        options = sorted(
+            {
+                value.strip().replace(",", ".")
+                for value in text.split("/")
+                if value.strip()
+            },
+            key=lambda value: _decimal(value) or Decimal("0"),
+        )
         return {
             "penalty_type": Infraction.PenaltyType.MULTIPLE,
             "amount": None,

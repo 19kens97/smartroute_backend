@@ -6,7 +6,7 @@ from rest_framework.test import APITestCase
 
 from apps.accounts.models import AgentProfile, Person
 from apps.core.models import AuditLog
-from apps.owners.models import Owner
+from apps.owners.models import Owner, VehicleOwnership
 
 from .models import Vehicle
 
@@ -354,6 +354,68 @@ class VehicleApiTests(APITestCase):
                 denied.status_code,
                 403,
             )
+
+
+    def test_create_with_owner_creates_current_ownership(self):
+        self.authenticate(self.entry)
+
+        response = self.client.post(
+            "/api/vehicles/",
+            {
+                "plate_number": "OWN-API-100",
+                "owner": self.owner.pk,
+                "brand": "Toyota",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        vehicle = Vehicle.objects.get(pk=response.data["id"])
+        self.assertEqual(vehicle.owner, self.owner)
+        current = VehicleOwnership.objects.get(vehicle=vehicle, is_current=True)
+        self.assertEqual(current.owner, self.owner)
+        self.assertTrue(current.is_current)
+
+    def test_patch_owner_routes_through_ownership_service(self):
+        new_owner = create_owner(
+            nif="OWNER-API-002",
+            first_name="Nouvel",
+            last_name="Owner",
+            created_by=self.entry,
+        )
+        VehicleOwnership.objects.create(
+            vehicle=self.vehicle,
+            owner=self.owner,
+            start_date=timezone.localdate(),
+            is_current=True,
+            created_by=self.entry,
+        )
+
+        self.authenticate(self.entry)
+        response = self.client.patch(
+            f"/api/vehicles/{self.vehicle.pk}/",
+            {"owner": new_owner.pk},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.vehicle.refresh_from_db()
+        self.assertEqual(self.vehicle.owner, new_owner)
+        self.assertEqual(
+            VehicleOwnership.objects.filter(vehicle=self.vehicle, is_current=True).count(),
+            1,
+        )
+        self.assertEqual(
+            VehicleOwnership.objects.get(vehicle=self.vehicle, is_current=True).owner,
+            new_owner,
+        )
+        self.assertTrue(
+            VehicleOwnership.objects.filter(
+                vehicle=self.vehicle,
+                owner=self.owner,
+                is_current=False,
+            ).exists()
+        )
 
     def test_put_and_delete_are_not_available(self):
         self.authenticate(self.entry)

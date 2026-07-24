@@ -87,6 +87,8 @@ PRIVATE_MEDIA_ENABLED = config("PRIVATE_MEDIA_ENABLED", cast=bool, default=True)
 PRIVATE_SIGNATURE_ROOT = Path(config("PRIVATE_SIGNATURE_ROOT", default=str(BASE_DIR / "private" / "agent-signatures")))
 PRIVATE_ALERT_EVIDENCE_ROOT = Path(config("PRIVATE_ALERT_EVIDENCE_ROOT", default=str(BASE_DIR / "private" / "alert-evidence")))
 PRIVATE_TICKET_PROOF_ROOT = Path(config("PRIVATE_TICKET_PROOF_ROOT", default=str(BASE_DIR / "private" / "ticket-proofs")))
+PRIVATE_DOCUMENT_ROOT = Path(config("PRIVATE_DOCUMENT_ROOT", default=str(BASE_DIR / "private" / "documents")))
+PRIVATE_SCAN_ROOT = Path(config("PRIVATE_SCAN_ROOT", default=str(BASE_DIR / "private" / "scans")))
 PRIVATE_DELIT_EVIDENCE_ROOT = Path(config("PRIVATE_DELIT_EVIDENCE_ROOT", default=str(BASE_DIR / "private" / "delit-evidence")))
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = [o.strip() for o in config("CORS_ALLOWED_ORIGINS", default="").split(",") if o.strip()]

@@ -10,6 +10,9 @@ class DocumentPermission(BasePermission):
     WRITE_ACTIONS = frozenset({"create", "partial_update"})
 
     def has_permission(self, request, view):
+        if request.method.lower() not in getattr(view, "http_method_names", []):
+            return True
+
         user = request.user
 
         if not (

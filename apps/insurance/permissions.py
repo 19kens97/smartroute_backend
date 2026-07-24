@@ -34,6 +34,9 @@ class InsurancePolicyPermission(BasePermission):
     )
 
     def has_permission(self, request, view):
+        if request.method.lower() not in getattr(view, "http_method_names", []):
+            return True
+
         user = request.user
 
         if not (

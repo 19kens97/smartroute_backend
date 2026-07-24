@@ -7,6 +7,7 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import AgentProfile, Person
+from apps.accounts.test_factories import create_agent_saisie_user
 from apps.core.models import AuditLog
 from apps.owners.models import Owner
 from apps.vehicles.models import Vehicle
@@ -20,9 +21,18 @@ from .serializers import (
 
 class InsurancePolicyModelAndSerializerTests(TestCase):
     def setUp(self):
+        self.creator = create_agent_saisie_user(
+            email="insurance.model.creator@example.com",
+            badge_number="INS-MOD-001",
+        )
+        owner_person = Person.objects.create(
+            nif="INS-OWNER-1",
+            first_name="Marie",
+            last_name="Joseph",
+        )
         self.owner = Owner.objects.create(
-            full_name="Marie Joseph",
-            national_id="INS-OWNER-1",
+            person=owner_person,
+            created_by=self.creator,
         )
         self.vehicle = Vehicle.objects.create(
             plate_number="AA-10001",
@@ -140,9 +150,14 @@ class InsurancePolicyApiTests(APITestCase):
         )
         self.personal = self._create_personal_user()
 
+        owner_person = Person.objects.create(
+            nif="INS-OWNER-2",
+            first_name="Jean",
+            last_name="Pierre",
+        )
         owner = Owner.objects.create(
-            full_name="Jean Pierre",
-            national_id="INS-OWNER-2",
+            person=owner_person,
+            created_by=self.entry,
         )
         self.vehicle = Vehicle.objects.create(
             plate_number="HT-24680",

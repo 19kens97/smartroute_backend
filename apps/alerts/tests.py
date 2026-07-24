@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import AgentProfile, Person
+from apps.accounts.test_factories import create_agent_saisie_user
 from apps.drivers.models import Driver
 from apps.insurance.models import InsurancePolicy
 from apps.owners.models import Owner
@@ -304,9 +305,18 @@ class ExpiryWarningServiceTests(TestCase):
     def setUp(self):
         self.today = timezone.localdate()
 
+        self.creator = create_agent_saisie_user(
+            email="expiry.creator@example.com",
+            badge_number="ALT-CRT-001",
+        )
+        owner_person = Person.objects.create(
+            nif="0012345678",
+            first_name="Jean",
+            last_name="Test",
+        )
         self.owner = Owner.objects.create(
-            full_name="Jean Test",
-            national_id="0012345678",
+            person=owner_person,
+            created_by=self.creator,
         )
         self.vehicle = Vehicle.objects.create(
             plate_number="HT-100",
@@ -401,3 +411,9 @@ class ExpiryWarningServiceTests(TestCase):
             ).count(),
             3,
         )
+
+    def test_owner_nif_uses_owner_person_nif(self):
+        from apps.alerts.services import _owner_nif
+
+        self.assertEqual(_owner_nif(self.vehicle), "0012345678")
+

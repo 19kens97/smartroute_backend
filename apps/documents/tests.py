@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APITestCase
 
@@ -183,3 +184,52 @@ class DocumentApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("file", response.data)
         self.assertIn("download_url", response.data)
+        self.assertTrue(response.data["download_url"].endswith(f"/api/documents/{self.document.pk}/download/"))
+        self.assertNotIn(settings.MEDIA_URL, response.data["download_url"])
+
+    def test_document_file_uses_private_storage(self):
+        self.assertEqual(
+            str(self.document.file.storage.location),
+            str(settings.PRIVATE_DOCUMENT_ROOT),
+        )
+        with self.assertRaises(ValueError):
+            self.document.file.url
+
+    def test_unauthenticated_user_cannot_download_document(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.get(f"/api/documents/{self.document.pk}/download/")
+        self.assertEqual(response.status_code, 401)
+
+    def test_professional_roles_can_download_document(self):
+        for user in (self.admin, self.terrain, self.saisie):
+            self.force_auth(user)
+            response = self.client.get(f"/api/documents/{self.document.pk}/download/")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response["Cache-Control"], "private, no-store")
+            self.assertEqual(b"".join(response.streaming_content), b"fake-png-content")
+
+    def test_missing_document_file_returns_404(self):
+        self.force_auth(self.terrain)
+        self.document.file.delete(save=False)
+        response = self.client.get(f"/api/documents/{self.document.pk}/download/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_disguised_document_files_are_rejected(self):
+        self.force_auth(self.saisie)
+        for upload in (
+            SimpleUploadedFile("fake.pdf", b"MZ executable", content_type="application/pdf"),
+            SimpleUploadedFile("fake.jpg", b"<script>", content_type="image/jpeg"),
+            SimpleUploadedFile("fake.png", b"not-a-png", content_type="image/png"),
+            SimpleUploadedFile("proof.pdf.exe", b"%PDF-1.4", content_type="application/pdf"),
+        ):
+            response = self.client.post(
+                "/api/documents/",
+                {
+                    "vehicle": self.vehicle.pk,
+                    "document_type": Document.DocumentType.SUPPORTING_DOCUMENT,
+                    "title": f"Rejected {upload.name}",
+                    "file": upload,
+                },
+                format="multipart",
+            )
+            self.assertEqual(response.status_code, 400)

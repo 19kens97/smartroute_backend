@@ -28,6 +28,20 @@ DANGEROUS_EXTENSIONS = {
     ".svg",
 }
 
+MAGIC_BYTE_SIGNATURES = {
+    ".jpg": (b"\xff\xd8\xff",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".pdf": (b"%PDF",),
+}
+
+MIME_MAGIC_EXTENSIONS = {
+    "image/jpeg": {".jpg", ".jpeg"},
+    "image/jpg": {".jpg", ".jpeg"},
+    "image/png": {".png"},
+    "application/pdf": {".pdf"},
+}
+
 
 def _extension(filename):
     return Path(filename or "").suffix.lower()
@@ -77,6 +91,53 @@ def scan_upload_path(_instance, filename):
 
 def profile_upload_path(instance, filename):
     return f"profiles/{getattr(instance, 'pk', None) or 'pending'}/{_uuid_filename(filename)}"
+
+
+def _read_prefix(file_obj, size=16):
+    current_position = None
+    try:
+        current_position = file_obj.tell()
+    except (AttributeError, OSError):
+        current_position = None
+
+    if hasattr(file_obj, "seek"):
+        file_obj.seek(0)
+    prefix = file_obj.read(size) if hasattr(file_obj, "read") else b""
+    if hasattr(file_obj, "seek"):
+        file_obj.seek(current_position or 0)
+    return prefix or b""
+
+
+def validate_magic_bytes(file_obj, *, extension, mime_type, field_name="file"):
+    expected_extensions = MIME_MAGIC_EXTENSIONS.get(mime_type, {extension})
+    relevant_extensions = {extension, *expected_extensions}
+    signatures = []
+    for ext in relevant_extensions:
+        signatures.extend(MAGIC_BYTE_SIGNATURES.get(ext, ()))
+
+    if not signatures:
+        return
+
+    prefix = _read_prefix(file_obj)
+    if not any(prefix.startswith(signature) for signature in signatures):
+        logger.warning(
+            "event=media_validation_failed reason=magic_bytes extension=%s mime_type=%s",
+            extension,
+            mime_type,
+        )
+        raise serializers.ValidationError(
+            {field_name: "Le contenu du fichier ne correspond pas au type declare."}
+        )
+
+
+def scan_file_for_virus(_file_obj):
+    """Point d'integration futur pour antivirus externe.
+
+    Aucun moteur antivirus n'est branche dans le MVP afin de ne pas simuler
+    une securite inexistante. Les appels futurs pourront retourner CLEAN,
+    INFECTED ou FAILED depuis ce point unique.
+    """
+    return "NOT_CONFIGURED"
 
 
 def compute_sha256(file_obj):
@@ -129,6 +190,8 @@ def validate_uploaded_media(
     if mime_type not in allowed_mime_types:
         logger.warning("event=media_validation_failed reason=mime media_type=%s mime_type=%s", media_type, mime_type)
         raise serializers.ValidationError({field_name: "Type MIME de fichier non autorise."})
+
+    validate_magic_bytes(file_obj, extension=extension, mime_type=mime_type, field_name=field_name)
 
     max_size = max_size_mb * 1024 * 1024
     if file_obj.size > max_size:

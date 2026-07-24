@@ -8,6 +8,8 @@ from django.core.files.base import ContentFile
 from PIL import Image, ImageDraw
 from rest_framework.test import APIClient, APITestCase
 
+from apps.accounts.test_factories import create_agent_terrain_user
+
 
 User = get_user_model()
 SIGNATURE_URL = "/api/auth/profile/signature/"
@@ -26,13 +28,13 @@ def make_png(size=(240, 120), draw_signature=True):
 class ProfileSignatureTests(APITestCase):
     def setUp(self):
         self.media_root = tempfile.mkdtemp()
-        self.signature_storage = User._meta.get_field("signature_file").storage
+        self.signature_storage = User.agent_profile.related.field.model._meta.get_field("signature_file").storage
         self.original_storage_location = self.signature_storage._location
         self.signature_storage._location = self.media_root
         self.signature_storage.__dict__.pop("base_location", None)
         self.signature_storage.__dict__.pop("location", None)
-        self.user = User.objects.create_user(username="agent", password="pass")
-        self.other_user = User.objects.create_user(username="other", password="pass")
+        self.user = create_agent_terrain_user(email="agent@example.com", password="pass", badge_number="SIG-001")
+        self.other_user = create_agent_terrain_user(email="other@example.com", password="pass", badge_number="SIG-002")
         self.client = APIClient()
 
     def tearDown(self):
@@ -56,14 +58,14 @@ class ProfileSignatureTests(APITestCase):
         response = self.client.put(SIGNATURE_URL, {"signature": upload}, format="multipart")
 
         self.assertEqual(response.status_code, 200)
-        self.user.refresh_from_db()
-        self.assertTrue(self.user.signature_file.name.startswith(f"signatures/agents/{self.user.pk}/"))
-        self.assertEqual(len(self.user.signature_sha256), 64)
+        self.user.agent_profile.refresh_from_db()
+        self.assertTrue(self.user.agent_profile.signature_file.name.startswith(f"signatures/agents/{self.user.agent_profile.pk}/"))
+        self.assertEqual(len(self.user.agent_profile.signature_sha256), 64)
         self.assertTrue(response.data["data"]["has_signature"])
 
     def test_agent_cannot_modify_another_agent_signature(self):
-        self.other_user.signature_file.save("signature.png", ContentFile(make_png()), save=True)
-        previous_name = self.other_user.signature_file.name
+        self.other_user.agent_profile.signature_file.save("signature.png", ContentFile(make_png()), save=True)
+        previous_name = self.other_user.agent_profile.signature_file.name
         self.authenticate(self.user)
         upload = io.BytesIO(make_png())
         upload.name = "signature.png"
@@ -71,8 +73,8 @@ class ProfileSignatureTests(APITestCase):
         response = self.client.put(SIGNATURE_URL, {"signature": upload}, format="multipart")
 
         self.assertEqual(response.status_code, 200)
-        self.other_user.refresh_from_db()
-        self.assertEqual(self.other_user.signature_file.name, previous_name)
+        self.other_user.agent_profile.refresh_from_db()
+        self.assertEqual(self.other_user.agent_profile.signature_file.name, previous_name)
 
     def test_missing_file_or_payload_is_rejected(self):
         self.authenticate()
@@ -112,24 +114,24 @@ class ProfileSignatureTests(APITestCase):
         )
         response = self.client.put(SIGNATURE_URL, {"signature_payload": payload}, format="multipart")
         self.assertEqual(response.status_code, 200)
-        self.user.refresh_from_db()
-        self.assertTrue(self.user.signature_file.name.endswith(".png"))
+        self.user.agent_profile.refresh_from_db()
+        self.assertTrue(self.user.agent_profile.signature_file.name.endswith(".png"))
 
     def test_replacing_signature_deletes_old_file(self):
         self.authenticate()
-        self.user.signature_file.save("signature.png", ContentFile(make_png()), save=True)
-        old_path = self.user.signature_file.path
+        self.user.agent_profile.signature_file.save("signature.png", ContentFile(make_png()), save=True)
+        old_path = self.user.agent_profile.signature_file.path
         upload = io.BytesIO(make_png(size=(260, 130)))
         upload.name = "signature.png"
 
         response = self.client.put(SIGNATURE_URL, {"signature": upload}, format="multipart")
 
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(self.user.signature_file.storage.exists(os.path.relpath(old_path, self.media_root)))
+        self.assertFalse(self.user.agent_profile.signature_file.storage.exists(os.path.relpath(old_path, self.media_root)))
 
     def test_status_and_delete_signature(self):
         self.authenticate()
-        self.user.signature_file.save("signature.png", ContentFile(make_png()), save=True)
+        self.user.agent_profile.signature_file.save("signature.png", ContentFile(make_png()), save=True)
         self.user.refresh_from_db()
 
         status_response = self.client.get(SIGNATURE_URL)
@@ -138,43 +140,34 @@ class ProfileSignatureTests(APITestCase):
 
         delete_response = self.client.delete(SIGNATURE_URL)
         self.assertEqual(delete_response.status_code, 200)
-        self.user.refresh_from_db()
-        self.assertFalse(self.user.signature_file)
+        self.user.agent_profile.refresh_from_db()
+        self.assertFalse(self.user.agent_profile.signature_file)
 
 
 class ProfileContactAndPasswordTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(
-            username="profile_agent",
-            password="OldPass123!",
+        self.user = create_agent_terrain_user(
             email="agent@example.com",
+            password="OldPass123!",
             first_name="Jean",
             last_name="Agent",
-            phone="+50937000000",
-            role="AGENT_TERRAIN",
             badge_number="AGT-100",
         )
-        self.other = User.objects.create_user(username="other_agent", password="pass", email="used@example.com")
+        self.other = create_agent_terrain_user(email="used@example.com", password="pass", badge_number="AGT-101")
         self.client = APIClient()
 
     def authenticate(self):
         self.client.force_authenticate(user=self.user)
 
-    def test_patch_me_updates_phone_and_normalizes(self):
+    def test_patch_me_ignores_removed_phone_field(self):
         self.authenticate()
         response = self.client.patch("/api/auth/me/", {"phone": "509 3712-3456"}, format="json")
         self.assertEqual(response.status_code, 200, response.data)
         self.user.refresh_from_db()
-        self.assertEqual(self.user.phone, "+50937123456")
-        self.assertEqual(response.data["data"]["phone"], "+50937123456")
         self.assertEqual(self.user.email, "agent@example.com")
 
-    def test_patch_me_rejects_invalid_phone_and_blank_email(self):
+    def test_patch_me_rejects_blank_email(self):
         self.authenticate()
-        bad_phone = self.client.patch("/api/auth/me/", {"phone": "123"}, format="json")
-        self.assertEqual(bad_phone.status_code, 400)
-        self.assertIn("phone", bad_phone.data["errors"])
-
         blank_email = self.client.patch("/api/auth/me/", {"email": ""}, format="json")
         self.assertEqual(blank_email.status_code, 400)
         self.assertIn("email", blank_email.data["errors"])
@@ -185,27 +178,25 @@ class ProfileContactAndPasswordTests(APITestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "new@example.com")
-        self.assertEqual(self.user.phone, "+50937000000")
-
         duplicate = self.client.patch("/api/auth/me/", {"email": "used@example.com"}, format="json")
         self.assertEqual(duplicate.status_code, 400)
-        self.assertEqual(duplicate.data["errors"]["email"][0], "Cette adresse e-mail est deja utilisee.")
+        self.assertIn("email", duplicate.data["errors"])
 
     def test_patch_me_requires_auth_and_ignores_forbidden_fields(self):
-        anonymous = self.client.patch("/api/auth/me/", {"phone": "+50937123456"}, format="json")
+        anonymous = self.client.patch("/api/auth/me/", {"email": "x@example.com"}, format="json")
         self.assertEqual(anonymous.status_code, 401)
 
         self.authenticate()
         response = self.client.patch(
             "/api/auth/me/",
-            {"phone": "+50937123456", "role": "ADMIN", "badge_number": "ROOT"},
+            {"email": "agent2@example.com", "role": "ADMIN", "badge_number": "ROOT"},
             format="json",
         )
         self.assertEqual(response.status_code, 200, response.data)
         self.user.refresh_from_db()
-        self.assertEqual(self.user.phone, "+50937123456")
-        self.assertEqual(self.user.role, "AGENT_TERRAIN")
-        self.assertEqual(self.user.badge_number, "AGT-100")
+        self.assertEqual(self.user.email, "agent2@example.com")
+        self.assertEqual(self.user.agent_profile.role, "AGENT_TERRAIN")
+        self.assertEqual(self.user.agent_profile.badge_number, "AGT-100")
 
     def test_change_password_requires_auth_and_rejects_bad_old_password(self):
         anonymous = self.client.post("/api/auth/change-password/", {}, format="json")

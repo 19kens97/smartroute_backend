@@ -2,7 +2,9 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.files.storage import FileSystemStorage
 from django.db import models
+from django.utils.deconstruct import deconstructible
 
 from apps.core.models import TimeStampedModel
 from apps.media_storage.services import document_upload_path
@@ -12,6 +14,20 @@ from apps.vehicles.models import Vehicle
 def upload_doc_path(instance, filename):
     """Compatibilité avec la migration initiale existante."""
     return document_upload_path(instance, filename)
+
+
+@deconstructible
+class PrivateDocumentStorage(FileSystemStorage):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("location", settings.PRIVATE_DOCUMENT_ROOT)
+        kwargs.setdefault("base_url", None)
+        super().__init__(*args, **kwargs)
+
+    def url(self, name):
+        raise ValueError("Private document files are not directly addressable.")
+
+
+private_document_storage = PrivateDocumentStorage()
 
 
 class Document(TimeStampedModel):
@@ -45,7 +61,7 @@ class Document(TimeStampedModel):
     )
     title = models.CharField(max_length=120)
     description = models.TextField(blank=True, default="")
-    file = models.FileField(upload_to=document_upload_path)
+    file = models.FileField(upload_to=document_upload_path, storage=private_document_storage)
     original_filename = models.CharField(
         max_length=255,
         blank=True,

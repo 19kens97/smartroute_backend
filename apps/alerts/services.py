@@ -61,7 +61,7 @@ def _owner_nif(vehicle):
     if person is not None:
         return person.nif or ""
 
-    return getattr(owner, "national_id", "") or ""
+    return getattr(owner, "nif", "") or ""
 
 
 def expire_field_alerts(*, now=None, actor=None):

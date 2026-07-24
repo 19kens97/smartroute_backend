@@ -40,6 +40,9 @@ class AlertPermission(BasePermission):
         return profile if profile.is_active else None
 
     def has_permission(self, request, view):
+        if request.method.lower() not in getattr(view, "http_method_names", []):
+            return True
+
         profile = self._profile(request.user)
         if profile is None:
             return False

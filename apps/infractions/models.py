@@ -1,8 +1,16 @@
+from decimal import Decimal, InvalidOperation
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 
 from apps.core.models import TimeStampedModel
+
+
+def _amount_sort_key(value):
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal("0")
 
 
 class Infraction(TimeStampedModel):
@@ -224,7 +232,8 @@ class Infraction(TimeStampedModel):
                     str(value)
                     for value in self.amount_options
                     if value not in (None, "")
-                }
+                },
+                key=_amount_sort_key,
             )
             if len(normalized) < 2:
                 raise ValidationError(

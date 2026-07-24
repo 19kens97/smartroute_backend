@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib.auth import password_validation
 from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from rest_framework import serializers
@@ -381,6 +382,26 @@ class UserProfileUpdateSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         raise NotImplementedError
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    confirm_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_old_password(self, value):
+        user = self.context["request"].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Mot de passe actuel incorrect.")
+        return value
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError({"confirm_password": "Les deux nouveaux mots de passe ne correspondent pas."})
+        if attrs["old_password"] == attrs["new_password"]:
+            raise serializers.ValidationError({"new_password": "Le nouveau mot de passe doit etre different de l'ancien."})
+        password_validation.validate_password(attrs["new_password"], self.context["request"].user)
+        return attrs
 
 
 class SecureTokenRefreshSerializer(SimpleJWTTokenRefreshSerializer):

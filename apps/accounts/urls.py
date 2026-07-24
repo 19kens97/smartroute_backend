@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    AgentSignatureView,
+    ChangePasswordView,
     CustomTokenView,
     PersonalLoginAPIView,
     ProfessionalLoginAPIView,
@@ -38,4 +40,6 @@ urlpatterns = [
     ),
     path("me/", UserProfileView.as_view(), name="user-profile"),
     path("me/update/", UserProfileUpdateView.as_view(), name="user-profile-update"),
+    path("change-password/", ChangePasswordView.as_view(), name="change-password"),
+    path("profile/signature/", AgentSignatureView.as_view(), name="profile-signature"),
 ]

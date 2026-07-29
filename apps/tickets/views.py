@@ -3,8 +3,7 @@ from io import BytesIO
 from django.db import transaction
 from django.http import FileResponse, Http404, HttpResponse
 from django.utils import timezone
-from reportlab.graphics.barcode import createBarcodeDrawing
-from reportlab.graphics import renderSVG
+from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.viewsets import ModelViewSet
@@ -256,6 +255,17 @@ class TicketViewSet(ModelViewSet):
 
     @action(detail=True, methods=["get"], url_path="barcode")
     def barcode(self, request, pk=None):
+        try:
+            from reportlab.graphics import renderSVG
+            from reportlab.graphics.barcode import createBarcodeDrawing
+        except ImportError:
+            return api_response(
+                False,
+                "Le module de génération du code-barres n'est pas disponible.",
+                {},
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         ticket = self.get_object()
         drawing = createBarcodeDrawing(
             "Code128",

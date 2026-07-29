@@ -178,7 +178,7 @@ class DriverViewSet(ModelViewSet):
             from apps.alerts.services import evaluate_judicial_alert
 
             judicial_alert, _ = evaluate_judicial_alert(
-                nif=drivers[0].nif,
+                driver=drivers[0],
                 actor=self.request.user,
                 unpaid_ticket_count=data["unpaid_tickets"]["count"],
             )
@@ -285,7 +285,7 @@ class DriverViewSet(ModelViewSet):
                 examples=[
                     OpenApiExample(
                         "Dossier",
-                        value="DRV-000124",
+                        value="DL-10001",
                     )
                 ],
             )

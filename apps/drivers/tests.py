@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import AgentProfile, Person
+from apps.tickets.models import Ticket
 
 from .models import Driver
 
@@ -286,6 +287,22 @@ class DriverApiTests(APITestCase):
             "VALID",
         )
 
+    def test_search_by_dossier_with_multiple_open_tickets_returns_judicial_alert(self):
+        self.force_auth(self.terrain)
+        Ticket.objects.create(driver=self.driver, opened_by=self.terrain)
+        Ticket.objects.create(driver=self.driver, opened_by=self.terrain)
+
+        response = self.client.get(
+            "/api/drivers/search-by-dossier/",
+            {"dossier_number": "DOS-001"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["unpaid_tickets"]["count"], 2)
+        self.assertEqual(
+            response.data["data"]["judicial_alert"]["code"],
+            "JUDICIAL_ALERT",
+        )
     def test_expiration_before_issue_date_is_rejected(self):
         self.force_auth(self.saisie)
 

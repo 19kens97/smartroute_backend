@@ -246,7 +246,6 @@ class Command(BaseCommand):
         ]
         drivers = {}
         for key, full_name, dossier, license_type, expires_at, blood in specs:
-            # driver5/6/7 share person with owners 5/7/8 for intersection coverage.
             if key == "driver5":
                 person = owners["owner5"].person
             elif key == "driver6":
@@ -430,29 +429,44 @@ class Command(BaseCommand):
 
     def seed_alerts(self, users, vehicles, drivers, today):
         specs = [
-            ("STOLEN", Alert.Category.ADMINISTRATIVE, Alert.AlertType.STOLEN_PLATE, Alert.Severity.CRITICAL, vehicles["SR10013"], "Plaque volee signalee."),
-            ("WANTED", Alert.Category.ADMINISTRATIVE, Alert.AlertType.WANTED_VEHICLE, Alert.Severity.CRITICAL, vehicles["SR10004"], "Vehicule recherche."),
-            ("FIELD", Alert.Category.FIELD_REPORT, Alert.AlertType.REFUSED_CONTROL, Alert.Severity.WARNING, vehicles["SR10002"], "Refus de controle terrain."),
-            ("SUSPICIOUS", Alert.Category.FIELD_REPORT, Alert.AlertType.SUSPICIOUS_BEHAVIOR, Alert.Severity.INFO, vehicles["SR10005"], "Comportement suspect."),
+            ("STOLEN_MOTO", "saisie1", Alert.Category.ADMINISTRATIVE, Alert.AlertType.STOLEN_PLATE, Alert.Severity.CRITICAL, Alert.Status.ACTIVE, vehicles["SR10013"], "Plaque volee signalee sur moto administrative."),
+            ("STOLEN_TAXI", "saisie2", Alert.Category.ADMINISTRATIVE, Alert.AlertType.STOLEN_PLATE, Alert.Severity.CRITICAL, Alert.Status.ACTIVE, vehicles["SR10002"], "Suspicion de plaque volee sur vehicule taxi."),
+            ("WANTED_TRUCK", "saisie3", Alert.Category.ADMINISTRATIVE, Alert.AlertType.WANTED_VEHICLE, Alert.Severity.CRITICAL, Alert.Status.ACTIVE, vehicles["SR10004"], "Vehicule recherche par l'administration."),
+            ("WANTED_BUS", "saisie4", Alert.Category.ADMINISTRATIVE, Alert.AlertType.WANTED_VEHICLE, Alert.Severity.WARNING, Alert.Status.ACTIVE, vehicles["SR10014"], "Verification administrative demandee sur bus."),
+            ("FIELD_REFUSED_TAXI", "terrain1", Alert.Category.FIELD_REPORT, Alert.AlertType.REFUSED_CONTROL, Alert.Severity.WARNING, Alert.Status.ACTIVE, vehicles["SR10002"], "Refus de controle terrain."),
+            ("FIELD_REFUSED_MOTO", "terrain2", Alert.Category.FIELD_REPORT, Alert.AlertType.REFUSED_CONTROL, Alert.Severity.WARNING, Alert.Status.ACTIVE, vehicles["SR10009"], "Conducteur reparti avant verification complete."),
+            ("FIELD_ESCAPE_BUS", "terrain2", Alert.Category.FIELD_REPORT, Alert.AlertType.FIELD_ESCAPE, Alert.Severity.CRITICAL, Alert.Status.ACTIVE, vehicles["SR10007"], "Fuite observee lors d'un controle routier."),
+            ("FIELD_ESCAPE_PICKUP", "terrain3", Alert.Category.FIELD_REPORT, Alert.AlertType.FIELD_ESCAPE, Alert.Severity.CRITICAL, Alert.Status.ACTIVE, vehicles["SR10006"], "Depart brusque apres injonction d'arret."),
+            ("SUSPICIOUS_BUS", "terrain3", Alert.Category.FIELD_REPORT, Alert.AlertType.SUSPICIOUS_BEHAVIOR, Alert.Severity.INFO, Alert.Status.ACTIVE, vehicles["SR10005"], "Comportement suspect signale pres du terminal."),
+            ("SUSPICIOUS_PICKUP", "terrain4", Alert.Category.FIELD_REPORT, Alert.AlertType.SUSPICIOUS_BEHAVIOR, Alert.Severity.INFO, Alert.Status.ACTIVE, vehicles["SR10006"], "Signalement informatif apres controle visuel."),
+            ("SUSPICIOUS_SPORTAGE", "terrain5", Alert.Category.FIELD_REPORT, Alert.AlertType.SUSPICIOUS_BEHAVIOR, Alert.Severity.INFO, Alert.Status.ACTIVE, vehicles["SR10008"], "Stationnement inhabituel observe pendant la patrouille."),
+            ("DOCUMENT_WARNING_PICKUP", "saisie3", Alert.Category.ADMINISTRATIVE, Alert.AlertType.DOCUMENT_EXPIRY_WARNING, Alert.Severity.INFO, Alert.Status.ACTIVE, vehicles["SR10015"], "Document proche de l'expiration."),
+            ("DOCUMENT_WARNING_COUNTY", "saisie4", Alert.Category.ADMINISTRATIVE, Alert.AlertType.DOCUMENT_EXPIRY_WARNING, Alert.Severity.INFO, Alert.Status.ACTIVE, vehicles["SR10007"], "Carte grise a verifier prochainement."),
+            ("DOCUMENT_WARNING_AVEO", "saisie5", Alert.Category.ADMINISTRATIVE, Alert.AlertType.DOCUMENT_EXPIRY_WARNING, Alert.Severity.INFO, Alert.Status.ACTIVE, vehicles["SR10012"], "Assurance a renouveler prochainement."),
+            ("JUDICIAL_ADMIN", "admin2", Alert.Category.ADMINISTRATIVE, Alert.AlertType.JUDICIAL_ALERT, Alert.Severity.WARNING, Alert.Status.ACTIVE, vehicles["SR10011"], "Alerte judiciaire administrative a verifier."),
+            ("JUDICIAL_OWNER", "admin3", Alert.Category.ADMINISTRATIVE, Alert.AlertType.JUDICIAL_ALERT, Alert.Severity.CRITICAL, Alert.Status.ACTIVE, vehicles["SR10010"], "Dossier judiciaire prioritaire lie au vehicule."),
+            ("INFO_CONTROL", "terrain1", Alert.Category.FIELD_REPORT, Alert.AlertType.SUSPICIOUS_BEHAVIOR, Alert.Severity.INFO, Alert.Status.ACTIVE, vehicles["SR10001"], "Controle informatif ajoute au dossier de suivi."),
+            ("INFO_PATROL", "terrain4", Alert.Category.FIELD_REPORT, Alert.AlertType.SUSPICIOUS_BEHAVIOR, Alert.Severity.INFO, Alert.Status.ACTIVE, vehicles["SR10003"], "Observation terrain sans action immediate."),
+            ("RESOLVED_WANTED", "saisie1", Alert.Category.ADMINISTRATIVE, Alert.AlertType.WANTED_VEHICLE, Alert.Severity.WARNING, Alert.Status.RESOLVED, vehicles["SR10010"], "Alerte resolue demo."),
+            ("CANCELLED_REFUSED", "terrain2", Alert.Category.FIELD_REPORT, Alert.AlertType.REFUSED_CONTROL, Alert.Severity.INFO, Alert.Status.CANCELLED, vehicles["SR10003"], "Signalement annule apres verification terrain."),
         ]
         alerts = []
-        for key, category, alert_type, severity, vehicle, description in specs:
-            alert, _ = Alert.objects.update_or_create(
-                deduplication_key=f"DEMO-DATASET:ALERT:{key}",
-                defaults={"created_by": users["terrain1"], "category": category, "alert_type": alert_type, "severity": severity, "status": Alert.Status.ACTIVE, "source": Alert.Source.MANUAL, "vehicle": vehicle, "plate_number": vehicle.plate_number, "description": description},
-            )
+        for key, creator_key, category, alert_type, severity, status, vehicle, description in specs:
+            defaults = {"created_by": users[creator_key], "category": category, "alert_type": alert_type, "severity": severity, "status": status, "source": Alert.Source.MANUAL, "vehicle": vehicle, "plate_number": vehicle.plate_number, "description": description}
+            if status == Alert.Status.RESOLVED:
+                defaults.update({"resolved_by": users["admin1"], "resolution_note": "Verification administrative terminee."})
+            elif status == Alert.Status.CANCELLED:
+                defaults.update({"resolved_by": users["admin1"], "resolution_note": "Signalement classe sans suite apres recoupement."})
+            alert, _ = Alert.objects.update_or_create(deduplication_key=f"DEMO-DATASET:ALERT:{key}", defaults=defaults)
             alerts.append(alert)
-        resolved, _ = Alert.objects.update_or_create(
-            deduplication_key="DEMO-DATASET:ALERT:RESOLVED",
-            defaults={"created_by": users["saisie1"], "category": Alert.Category.ADMINISTRATIVE, "alert_type": Alert.AlertType.WANTED_VEHICLE, "severity": Alert.Severity.WARNING, "status": Alert.Status.RESOLVED, "source": Alert.Source.MANUAL, "vehicle": vehicles["SR10010"], "plate_number": vehicles["SR10010"].plate_number, "description": "Alerte resolue demo.", "resolved_by": users["admin1"], "resolution_note": "Verification administrative terminee."},
-        )
-        alerts.append(resolved)
         evidence_alert = alerts[0]
         if not evidence_alert.evidence.exists():
             evidence = AlertEvidence.objects.create(alert=evidence_alert, evidence_type=AlertEvidence.EvidenceType.AUDIO, mime_type="audio/mp4", size_bytes=24, duration_seconds=12, created_by=users["terrain1"])
             evidence.file.save("alert-demo.m4a", ContentFile(b"DEMO AUDIO EVIDENCE"), save=True)
+        receipt_users = [users["saisie1"], users["saisie2"], users["saisie3"], users["terrain1"], users["terrain2"], users["terrain3"], users["admin1"]]
         for alert in alerts:
-            AlertReceipt.objects.update_or_create(alert=alert, user=users["saisie1"], defaults={"opened_at": timezone.now() if alert.severity == Alert.Severity.CRITICAL else None})
+            for user in receipt_users:
+                AlertReceipt.objects.update_or_create(alert=alert, user=user, defaults={"opened_at": timezone.now() if alert.severity == Alert.Severity.CRITICAL else None})
         return alerts
 
     def seed_scans(self, users, vehicles):
@@ -481,7 +495,21 @@ class Command(BaseCommand):
         if not all(self.table_exists(model) for model in (DelitType, DelitCase, DelitAction, DelitEvidence)):
             self.stdout.write("Delits demo skipped: delits tables are not migrated in this database.")
             return []
-        delit_type, _ = DelitType.objects.update_or_create(code="DEMO_DANGEROUS_DRIVING", defaults={"label": "Conduite dangereuse demo", "description": "Cas demo", "active": True})
+        type_specs = [
+            ("DEMO_DANGEROUS_DRIVING", "Conduite dangereuse demo", "Manoeuvre dangereuse constatee pendant un controle.", "Code routier demo", 10),
+            ("DEMO_HIT_AND_RUN", "Fuite apres accident demo", "Depart du conducteur apres un accident ou dommage constate.", "Code routier demo", 20),
+            ("DEMO_DOCUMENT_FRAUD", "Fraude documentaire demo", "Document falsifie, incoherent ou presente comme authentique.", "Code penal demo", 30),
+            ("DEMO_REFUSED_ORDER", "Refus d'obtemperer demo", "Refus d'executer une injonction reguliere d'un agent.", "Code routier demo", 40),
+            ("DEMO_RECKLESS_ENDANGERMENT", "Mise en danger demo", "Comportement exposant les usagers a un risque grave.", "Code penal demo", 50),
+        ]
+        delit_types = {}
+        for code, label, description, legal_basis, display_order in type_specs:
+            item, _ = DelitType.objects.update_or_create(
+                code=code,
+                defaults={"label": label, "description": description, "legal_basis": legal_basis, "active": True, "display_order": display_order},
+            )
+            delit_types[code] = item
+        delit_type = delit_types["DEMO_DANGEROUS_DRIVING"]
         cases = []
         specs = [
             ("OPEN", DelitCase.QualificationStatus.POTENTIAL, DelitCase.ProcedureStatus.OPEN, vehicles["SR10004"], drivers["driver1"], tickets[0], alerts[0]),

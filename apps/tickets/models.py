@@ -118,7 +118,7 @@ class Ticket(TimeStampedModel):
 
     def clean(self):
         super().clean()
-        self.driver_dossier_snapshot = (self.driver_dossier_snapshot or "").strip().upper()
+        self.driver_dossier_snapshot = Driver.normalize_dossier_number(self.driver_dossier_snapshot) if self.driver_dossier_snapshot else ""
         self.driver_name_snapshot = (self.driver_name_snapshot or "").strip()
         self.driver_nif_snapshot = (self.driver_nif_snapshot or "").strip().upper()
         self.note = (self.note or "").strip()
@@ -357,3 +357,5 @@ class TicketProof(TimeStampedModel):
 
     class Meta:
         ordering = ("created_at", "id")
+
+

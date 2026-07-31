@@ -16,7 +16,7 @@ class OwnersApiTests(APITestCase):
     def create_professional(self, email, role, badge):
         User = get_user_model()
         person = Person.objects.create(
-            nif=f"NIF-{badge}",
+            nif={"OWN-SAI-001": "910-000-001-0", "OWN-TER-001": "910-000-002-0"}[badge],
             first_name=role,
             last_name="OwnerTest",
         )
@@ -64,13 +64,13 @@ class OwnersApiTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertTrue(
             Owner.objects.filter(
-                person__nif="0012345678"
+                person__nif="001-234-567-8"
             ).exists()
         )
 
     def test_existing_person_can_be_reused(self):
         person = Person.objects.create(
-            nif="00998877",
+            nif="910-000-003-0",
             first_name="Marie",
             last_name="Louis",
         )
@@ -88,7 +88,7 @@ class OwnersApiTests(APITestCase):
             "/api/owners/",
             {
                 "person_data": {
-                    "nif": "00887766",
+                    "nif": "910-000-004-0",
                     "first_name": "Test",
                     "last_name": "Terrain",
                 }
@@ -99,7 +99,7 @@ class OwnersApiTests(APITestCase):
 
     def test_put_and_delete_are_not_allowed(self):
         person = Person.objects.create(
-            nif="00445566",
+            nif="910-000-005-0",
             first_name="Owner",
             last_name="Locked",
         )
@@ -128,7 +128,7 @@ class VehicleOwnershipConsistencyTests(APITestCase):
 
     def setUp(self):
         User = get_user_model()
-        person = Person.objects.create(nif="OWN-CONS-AGENT", first_name="Agent", last_name="Saisie")
+        person = Person.objects.create(nif="910-000-006-0", first_name="Agent", last_name="Saisie")
         self.entry = User.objects.create_user(
             person=person,
             account_type=User.AccountType.PROFESSIONAL,
@@ -141,8 +141,8 @@ class VehicleOwnershipConsistencyTests(APITestCase):
             badge_number="OWN-CONS-001",
             is_active=True,
         )
-        self.owner_a = self._owner("OWN-A", "Owner", "A")
-        self.owner_b = self._owner("OWN-B", "Owner", "B")
+        self.owner_a = self._owner("910-000-007-0", "Owner", "A")
+        self.owner_b = self._owner("910-000-008-0", "Owner", "B")
         self.vehicle = Vehicle.objects.create(plate_number="OWN-500")
 
     def _owner(self, nif, first_name, last_name):
@@ -240,4 +240,5 @@ class VehicleOwnershipConsistencyTests(APITestCase):
             VehicleOwnership.objects.filter(vehicle=self.vehicle, is_current=True).count(),
             1,
         )
+
 

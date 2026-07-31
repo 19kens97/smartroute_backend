@@ -62,7 +62,7 @@ class TicketModelTests(TicketTestMixin, TestCase):
     def test_ticket_generates_number_and_barcode_value(self):
         ticket = Ticket.objects.create(
             opened_by=self.agent,
-            driver_dossier_snapshot="D-100",
+            driver_dossier_snapshot="AB-12345-CD",
         )
         self.assertRegex(ticket.ticket_number, r"^[0-9A-F]{8}$")
         self.assertEqual(ticket.barcode_value, f"PV:{ticket.ticket_number}")
@@ -70,7 +70,7 @@ class TicketModelTests(TicketTestMixin, TestCase):
     def test_infraction_snapshot_is_informational_without_selected_amount(self):
         ticket = Ticket.objects.create(
             opened_by=self.agent,
-            driver_dossier_snapshot="D-100",
+            driver_dossier_snapshot="AB-12345-CD",
         )
         verbalization = TicketVerbalization.objects.create(
             ticket=ticket,
@@ -88,10 +88,10 @@ class TicketModelTests(TicketTestMixin, TestCase):
     def test_open_ticket_is_found_by_dossier(self):
         ticket = Ticket.objects.create(
             opened_by=self.agent,
-            driver_dossier_snapshot="D-100",
+            driver_dossier_snapshot="AB-12345-CD",
         )
         self.assertEqual(
-            find_open_ticket(dossier_number="d-100"),
+            find_open_ticket(dossier_number="ab12345cd"),
             ticket,
         )
 
@@ -125,7 +125,7 @@ class TicketApiTests(TicketTestMixin, APITestCase):
 
     def create_payload(self):
         return {
-            "driver_dossier_snapshot": "D-100",
+            "driver_dossier_snapshot": "AB-12345-CD",
             "first_verbalization": {
                 "plate_number_snapshot": "HT-100",
                 "location_label": "Delmas 33",
@@ -173,7 +173,7 @@ class TicketApiTests(TicketTestMixin, APITestCase):
     def test_closed_ticket_rejects_new_verbalization(self):
         ticket = Ticket.objects.create(
             opened_by=self.field,
-            driver_dossier_snapshot="D-100",
+            driver_dossier_snapshot="AB-12345-CD",
         )
         TicketVerbalization.objects.create(
             ticket=ticket,
@@ -200,7 +200,7 @@ class TicketApiTests(TicketTestMixin, APITestCase):
     def test_barcode_endpoint_returns_svg(self):
         ticket = Ticket.objects.create(
             opened_by=self.field,
-            driver_dossier_snapshot="D-100",
+            driver_dossier_snapshot="AB-12345-CD",
         )
         self.auth(self.field)
         response = self.client.get(f"/api/tickets/{ticket.pk}/barcode/")
@@ -217,7 +217,7 @@ class TicketApiTests(TicketTestMixin, APITestCase):
     def test_only_admin_closes_ticket(self):
         ticket = Ticket.objects.create(
             opened_by=self.field,
-            driver_dossier_snapshot="D-100",
+            driver_dossier_snapshot="AB-12345-CD",
         )
         self.auth(self.entry)
         denied = self.client.post(
@@ -236,3 +236,4 @@ class TicketApiTests(TicketTestMixin, APITestCase):
         self.assertEqual(accepted.status_code, 200)
         ticket.refresh_from_db()
         self.assertEqual(ticket.status, Ticket.Status.CLOSED)
+

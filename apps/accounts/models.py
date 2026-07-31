@@ -78,11 +78,10 @@ class Person(TimeStampedModel):
 
     @staticmethod
     def normalize_nif(value: str | None) -> str:
-        return "".join(
-            char
-            for char in str(value or "").strip().upper()
-            if char.isalnum()
-        )
+        digits = "".join(char for char in str(value or "").strip() if char.isdigit())
+        if len(digits) != 10:
+            return ""
+        return f"{digits[:3]}-{digits[3:6]}-{digits[6:9]}-{digits[9]}"
 
     @staticmethod
     def normalize_name(value: str | None) -> str:
@@ -315,12 +314,17 @@ class AgentProfile(TimeStampedModel):
     def normalize_text(value: str | None) -> str:
         return " ".join(str(value or "").strip().split())
 
+    @staticmethod
+    def normalize_badge_number(value: str | None) -> str:
+        digits = "".join(char for char in str(value or "").strip() if char.isdigit())
+        if len(digits) != 11:
+            return ""
+        return f"{digits[:2]}-{digits[2:4]}-{digits[4:6]}-{digits[6:]}"
+
     def clean(self):
         super().clean()
 
-        self.badge_number = self.normalize_text(
-            self.badge_number
-        ).upper()
+        self.badge_number = self.normalize_badge_number(self.badge_number)
         self.post = self.normalize_text(self.post)
         self.precinct = self.normalize_text(self.precinct)
 
@@ -379,3 +383,5 @@ class AgentProfile(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.badge_number} - {self.get_role_display()}"
+
+

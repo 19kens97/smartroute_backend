@@ -13,6 +13,7 @@ from .serializers import (
     DelitTypeSerializer, DelitCaseSerializer, DelitActionSerializer,
     DelitEvidenceSerializer, ReasonSerializer, ReferSerializer,
 )
+from .dcpj import send_case_to_dcpj_demo
 from .services import transition_case
 
 

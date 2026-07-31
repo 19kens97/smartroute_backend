@@ -3,6 +3,7 @@ from django.db.models.functions import Replace, Upper
 from django.utils import timezone
 
 from apps.accounts.models import Person
+from .models import Driver
 from apps.tickets.services import (
     build_unpaid_ticket_summary,
     get_unpaid_valid_tickets_for_drivers,
@@ -16,7 +17,7 @@ VALIDITY_UNKNOWN = "UNKNOWN"
 
 
 def normalize_dossier_number(value: str) -> str:
-    return str(value or "").strip().upper()
+    return Driver.normalize_dossier_number(value)
 
 
 def normalize_dossier_lookup_value(value: str) -> str:
@@ -47,7 +48,7 @@ def normalized_dossier_expression(field_name="dossier_number"):
 
 
 def normalize_nif(value: str) -> str:
-    return Person.normalize_nif(str(value or ""))
+    return "".join(char for char in str(value or "") if char.isdigit())
 
 
 def normalized_nif_expression(field_name="person__nif"):
@@ -128,3 +129,6 @@ def build_license_search_result(
             ),
         },
     )
+
+
+

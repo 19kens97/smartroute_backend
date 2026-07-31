@@ -1,8 +1,14 @@
+import re
+
 from django.core.exceptions import ValidationError
 from django.db import models
 
 from apps.accounts.models import Person
 from apps.core.models import TimeStampedModel
+
+
+DRIVER_DOSSIER_PATTERN = re.compile(r"^[A-Z]{2}-[0-9]{5}-[A-Z]{2}$")
+DRIVER_DOSSIER_COMPACT_PATTERN = re.compile(r"^[A-Z]{2}[0-9]{5}[A-Z]{2}$")
 
 
 class Driver(TimeStampedModel):
@@ -66,7 +72,19 @@ class Driver(TimeStampedModel):
 
     @staticmethod
     def normalize_dossier_number(value: str | None) -> str:
-        return str(value or "").strip().upper()
+        raw = str(value or "").strip().upper()
+        compact = "".join(character for character in raw if character.isalnum())
+        if DRIVER_DOSSIER_COMPACT_PATTERN.fullmatch(compact):
+            return f"{compact[:2]}-{compact[2:7]}-{compact[7:]}"
+        if DRIVER_DOSSIER_PATTERN.fullmatch(raw):
+            return raw
+        raise ValidationError(
+            {
+                "dossier_number": (
+                    "Le numero de permis doit respecter le format XX-YYYYY-XX."
+                )
+            }
+        )
 
     @staticmethod
     def normalize_text(value: str | None) -> str:
@@ -143,3 +161,6 @@ class Driver(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.full_name} ({self.dossier_number})"
+
+
+

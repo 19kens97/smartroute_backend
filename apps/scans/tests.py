@@ -196,7 +196,7 @@ class GeminiScanAPITests(APITestCase):
             penalty_type=Infraction.PenaltyType.FIXED,
             amount=Decimal("500.00"),
         )
-        open_ticket = Ticket.objects.create(opened_by=self.user, driver_dossier_snapshot="DRV-1")
+        open_ticket = Ticket.objects.create(opened_by=self.user, driver_dossier_snapshot="AB-20001-CD")
         first = TicketVerbalization.objects.create(ticket=open_ticket, sequence_number=1, agent=self.user, vehicle=vehicle, plate_number_snapshot="TT-55555")
         TicketInfraction.objects.create(verbalization=first, infraction=infraction)
         second = TicketVerbalization.objects.create(ticket=open_ticket, sequence_number=2, agent=self.user, vehicle=vehicle, plate_number_snapshot="TT-55555")
@@ -208,7 +208,7 @@ class GeminiScanAPITests(APITestCase):
             size_bytes=len(b"proof-image"),
             created_by=self.user,
         )
-        closed_ticket = Ticket.objects.create(opened_by=self.user, driver_dossier_snapshot="DRV-2")
+        closed_ticket = Ticket.objects.create(opened_by=self.user, driver_dossier_snapshot="AB-20002-CD")
         TicketVerbalization.objects.create(ticket=closed_ticket, sequence_number=1, agent=self.user, vehicle=vehicle, plate_number_snapshot="TT-55555")
         closed_ticket.status = Ticket.Status.CLOSED
         closed_ticket.closed_by = self.user
@@ -301,3 +301,4 @@ class GeminiScanAPITests(APITestCase):
     def test_scan_history_requires_authentication(self):
         self.client.force_authenticate(user=None)
         self.assertEqual(self.client.get("/api/scans/history/").status_code, 401)
+

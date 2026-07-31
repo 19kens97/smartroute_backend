@@ -1,4 +1,4 @@
-﻿from datetime import timedelta
+from datetime import timedelta
 
 from django.utils import timezone
 from rest_framework.test import APITestCase
@@ -38,7 +38,7 @@ class DashboardStatisticsTests(APITestCase):
         self.set_created_at(scan, first_day)
         gemini = GeminiScan.objects.create(agent=self.user, plate_number="BB-002", model_used="gemini", plate_detected=True)
         self.set_scanned_at(gemini, today)
-        ticket = Ticket.objects.create(opened_by=self.user, driver_dossier_snapshot="D1")
+        ticket = Ticket.objects.create(opened_by=self.user, driver_dossier_snapshot="AB-10001-CD")
         self.set_created_at(ticket, today)
 
         response = self.client.get("/api/dashboard/summary/")
@@ -60,8 +60,8 @@ class DashboardStatisticsTests(APITestCase):
         belt = Infraction.objects.create(code="07", number=7, label="Ceinture", penalty_type=Infraction.PenaltyType.FIXED, amount=100)
         speed = Infraction.objects.create(code="12", number=12, label="Vitesse", penalty_type=Infraction.PenaltyType.FIXED, amount=200)
         phone = Infraction.objects.create(code="03", number=3, label="Telephone", penalty_type=Infraction.PenaltyType.FIXED, amount=150)
-        ticket_a = self.set_created_at(Ticket.objects.create(opened_by=self.user, driver_dossier_snapshot="A"), today)
-        ticket_b = self.set_created_at(Ticket.objects.create(opened_by=self.user, driver_dossier_snapshot="B"), today)
+        ticket_a = self.set_created_at(Ticket.objects.create(opened_by=self.user, driver_dossier_snapshot="AB-10002-CD"), today)
+        ticket_b = self.set_created_at(Ticket.objects.create(opened_by=self.user, driver_dossier_snapshot="AB-10003-CD"), today)
         TicketInfraction.objects.create(verbalization=TicketVerbalization.objects.create(ticket=ticket_a, sequence_number=1, agent=self.user, plate_number_snapshot="AA"), infraction=belt)
         TicketInfraction.objects.create(verbalization=ticket_a.verbalizations.first(), infraction=speed)
         TicketInfraction.objects.create(verbalization=TicketVerbalization.objects.create(ticket=ticket_b, sequence_number=1, agent=self.user, plate_number_snapshot="BB"), infraction=speed)
@@ -95,7 +95,7 @@ class DashboardStatisticsTests(APITestCase):
         self.assertEqual(first.status_code, 200)
         self.assertEqual(first.data["data"]["totals"]["tickets"], 0)
 
-        ticket = Ticket.objects.create(opened_by=self.user, driver_dossier_snapshot="CACHE")
+        ticket = Ticket.objects.create(opened_by=self.user, driver_dossier_snapshot="AB-10004-CD")
         self.set_created_at(ticket, today)
 
         cached = self.client.get("/api/dashboard/summary/")
@@ -104,3 +104,4 @@ class DashboardStatisticsTests(APITestCase):
         invalidate_statistics_cache()
         refreshed = self.client.get("/api/dashboard/summary/")
         self.assertEqual(refreshed.data["data"]["totals"]["tickets"], 1)
+

@@ -35,7 +35,7 @@ class DriverApiTests(APITestCase):
         self.personal = self._create_personal_user()
 
         self.driver_person = Person.objects.create(
-            nif="0012345678",
+            nif="001-234-567-8",
             first_name="Jean",
             last_name="Permis",
             birth_date=self.today.replace(
@@ -44,7 +44,7 @@ class DriverApiTests(APITestCase):
         )
         self.driver = Driver.objects.create(
             person=self.driver_person,
-            dossier_number="DOS-001",
+            dossier_number="AB-12345-CD",
             address="Delmas",
             sex=Driver.Sex.MALE,
             blood_group="O+",
@@ -63,7 +63,7 @@ class DriverApiTests(APITestCase):
     ):
         User = get_user_model()
         person = Person.objects.create(
-            nif=f"NIF-{badge_number}",
+            nif={"ADM-DRIVER-001": "900-000-001-0", "TER-DRIVER-001": "900-000-002-0", "SAI-DRIVER-001": "900-000-003-0"}[badge_number],
             first_name=role,
             last_name="Test",
         )
@@ -84,7 +84,7 @@ class DriverApiTests(APITestCase):
     def _create_personal_user(self):
         User = get_user_model()
         person = Person.objects.create(
-            nif="PERSONAL-USER-001",
+            nif="900-000-004-0",
             first_name="Compte",
             last_name="Personnel",
         )
@@ -120,12 +120,12 @@ class DriverApiTests(APITestCase):
             "/api/drivers/",
             {
                 "person": {
-                    "nif": "0099988877",
+                    "nif": "009-998-887-7",
                     "first_name": "Marie",
                     "last_name": "Permis",
                     "birth_date": "1992-05-20",
                 },
-                "dossier_number": "DOS-002",
+                "dossier_number": "CD-23456-EF",
                 "address": "Pétion-Ville",
                 "sex": "F",
                 "blood_group": "A+",
@@ -140,13 +140,13 @@ class DriverApiTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertTrue(
             Driver.objects.filter(
-                dossier_number="DOS-002"
+                dossier_number="CD-23456-EF"
             ).exists()
         )
 
     def test_agent_saisie_can_create_driver_for_existing_person(self):
         person = Person.objects.create(
-            nif="EXISTING-001",
+            nif="900-000-005-0",
             first_name="Existing",
             last_name="Person",
         )
@@ -156,7 +156,7 @@ class DriverApiTests(APITestCase):
             "/api/drivers/",
             {
                 "person_id": person.pk,
-                "dossier_number": "DOS-EXISTING",
+                "dossier_number": "GH-34567-IJ",
                 "license_type": "B",
             },
             format="json",
@@ -165,7 +165,7 @@ class DriverApiTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(
             Driver.objects.get(
-                dossier_number="DOS-EXISTING"
+                dossier_number="GH-34567-IJ"
             ).person_id,
             person.pk,
         )
@@ -177,7 +177,7 @@ class DriverApiTests(APITestCase):
             "/api/drivers/",
             {
                 "person_id": self.driver_person.pk,
-                "dossier_number": "DOS-DUPLICATE",
+                "dossier_number": "KL-45678-MN",
                 "license_type": "B",
             },
             format="json",
@@ -188,11 +188,11 @@ class DriverApiTests(APITestCase):
     def test_admin_and_terrain_cannot_create_driver(self):
         payload = {
             "person": {
-                "nif": "BLOCKED-001",
+                "nif": "900-000-006-0",
                 "first_name": "Blocked",
                 "last_name": "Create",
             },
-            "dossier_number": "DOS-BLOCKED",
+            "dossier_number": "OP-56789-QR",
             "license_type": "B",
         }
 
@@ -248,13 +248,13 @@ class DriverApiTests(APITestCase):
 
         response = self.client.get(
             "/api/drivers/search-by-dossier/",
-            {"dossier_number": " dos 001 "},
+            {"dossier_number": " ab 12345 cd "},
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.data["data"]["licenses"][0]["dossier_number"],
-            "DOS-001",
+            "AB-12345-CD",
         )
 
     def test_search_by_nif_uses_person_model(self):
@@ -269,7 +269,7 @@ class DriverApiTests(APITestCase):
         self.assertEqual(response.data["data"]["count"], 1)
         self.assertEqual(
             response.data["data"]["licenses"][0]["nif"],
-            "0012345678",
+            "001-234-567-8",
         )
 
     def test_response_contains_validity_state(self):
@@ -277,7 +277,7 @@ class DriverApiTests(APITestCase):
 
         response = self.client.get(
             "/api/drivers/search-by-dossier/",
-            {"dossier_number": "DOS-001"},
+            {"dossier_number": "AB-12345-CD"},
         )
 
         license_data = response.data["data"]["licenses"][0]
@@ -294,7 +294,7 @@ class DriverApiTests(APITestCase):
 
         response = self.client.get(
             "/api/drivers/search-by-dossier/",
-            {"dossier_number": "DOS-001"},
+            {"dossier_number": "AB-12345-CD"},
         )
 
         self.assertEqual(response.status_code, 200)
@@ -316,3 +316,5 @@ class DriverApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+

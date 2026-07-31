@@ -332,7 +332,7 @@ class ExpiryWarningServiceTests(TestCase):
         )
         self.driver = Driver.objects.create(
             person=self.person,
-            dossier_number="DRV-100",
+            dossier_number="AB-30001-CD",
             license_type="B",
             issue_date=self.today - timedelta(days=300),
             expires_at=self.today + timedelta(days=15),
@@ -416,4 +416,5 @@ class ExpiryWarningServiceTests(TestCase):
         from apps.alerts.services import _owner_nif
 
         self.assertEqual(_owner_nif(self.vehicle), "0012345678")
+
 

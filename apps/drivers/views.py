@@ -285,7 +285,7 @@ class DriverViewSet(ModelViewSet):
                 examples=[
                     OpenApiExample(
                         "Dossier",
-                        value="DL-10001",
+                        value="AB-12345-CD",
                     )
                 ],
             )
@@ -374,3 +374,4 @@ class DriverViewSet(ModelViewSet):
     )
     def search(self, request):
         return self._search_by_dossier_response(request)
+

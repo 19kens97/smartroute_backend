@@ -69,6 +69,12 @@ class DelitCase(TimeStampedModel):
         CLOSED = 'CLOSED', 'Clôturé'
         CANCELLED = 'CANCELLED', 'Annulé'
 
+    class DCPJStatus(models.TextChoices):
+        NOT_SENT = 'NOT_SENT', 'Non transmis'
+        SENT = 'SENT', 'Transmis'
+        ACKNOWLEDGED = 'ACKNOWLEDGED', 'Accuse reception'
+        FAILED = 'FAILED', 'Echec transmission'
+
     client_uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
     case_number = models.CharField(max_length=24, unique=True, db_index=True, editable=False)
     delit_type = models.ForeignKey(DelitType, on_delete=models.PROTECT, related_name='cases')
@@ -80,6 +86,7 @@ class DelitCase(TimeStampedModel):
     infraction = models.ForeignKey('infractions.Infraction', on_delete=models.PROTECT, null=True, blank=True, related_name='delit_cases')
     driver = models.ForeignKey('drivers.Driver', on_delete=models.PROTECT, null=True, blank=True, related_name='delit_cases')
     vehicle = models.ForeignKey('vehicles.Vehicle', on_delete=models.PROTECT, null=True, blank=True, related_name='delit_cases')
+    plate_number_snapshot = models.CharField(max_length=20, blank=True, default='', db_index=True)
     facts = models.TextField()
     detected_at = models.DateTimeField(default=timezone.now, db_index=True)
     detected_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='detected_delit_cases')
@@ -101,6 +108,12 @@ class DelitCase(TimeStampedModel):
     cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='cancelled_delit_cases')
     cancellation_reason = models.TextField(blank=True, default='')
     deduplication_key = models.CharField(max_length=255, blank=True, default='', db_index=True)
+    dcpj_status = models.CharField(max_length=20, choices=DCPJStatus.choices, default=DCPJStatus.NOT_SENT, db_index=True)
+    dcpj_reference = models.CharField(max_length=80, blank=True, default='', db_index=True)
+    dcpj_sent_at = models.DateTimeField(null=True, blank=True)
+    dcpj_last_error = models.TextField(blank=True, default='')
+    dcpj_payload_snapshot = models.JSONField(default=dict, blank=True)
+    dcpj_response_snapshot = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ('-detected_at', '-id')
@@ -120,13 +133,16 @@ class DelitCase(TimeStampedModel):
         self.review_note = (self.review_note or '').strip()
         self.referred_to = (self.referred_to or '').strip()
         self.external_reference = (self.external_reference or '').strip()
+        self.plate_number_snapshot = (self.plate_number_snapshot or '').strip().upper()
         self.closure_reason = (self.closure_reason or '').strip()
         self.cancellation_reason = (self.cancellation_reason or '').strip()
+        self.dcpj_reference = (self.dcpj_reference or '').strip()
+        self.dcpj_last_error = (self.dcpj_last_error or '').strip()
         if len(self.facts) < 10:
             raise ValidationError({'facts':'Les faits doivent contenir au moins 10 caractères.'})
         if self.verbalization_id and self.ticket_id and self.verbalization.ticket_id != self.ticket_id:
             raise ValidationError({'verbalization':'La verbalisation ne correspond pas au PV sélectionné.'})
-        if not any([self.scan_id,self.ticket_id,self.verbalization_id,self.alert_id,self.driver_id,self.vehicle_id]):
+        if not any([self.scan_id,self.ticket_id,self.verbalization_id,self.alert_id,self.driver_id,self.vehicle_id,self.plate_number_snapshot]):
             raise ValidationError('Au moins une source ou une entité métier doit être liée au dossier.')
         if self.qualification_status in {self.QualificationStatus.CONFIRMED,self.QualificationStatus.REJECTED}:
             if not self.reviewed_by_id or not self.reviewed_at or len(self.review_note) < 5:
@@ -223,3 +239,4 @@ class DelitStatusHistory(models.Model):
     changed_at=models.DateTimeField(default=timezone.now,db_index=True)
     reason=models.TextField(blank=True,default='')
     class Meta: ordering=('changed_at','id')
+

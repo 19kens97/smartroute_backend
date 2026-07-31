@@ -128,7 +128,7 @@ class PersonalLoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, trim_whitespace=False)
 
     def validate_dossier_number(self, value):
-        return value.strip().upper()
+        return Driver.normalize_dossier_number(value)
 
     def validate(self, attrs):
         generic_error = "Numéro de dossier ou mot de passe incorrect."
@@ -435,3 +435,4 @@ class SecureTokenRefreshSerializer(SimpleJWTTokenRefreshSerializer):
         data = super().validate(attrs)
         data["account_type"] = user.account_type
         return data
+

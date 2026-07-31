@@ -257,6 +257,9 @@ class DriverDossierSearchQuerySerializer(serializers.Serializer):
         trim_whitespace=True,
     )
 
+    def validate_dossier_number(self, value):
+        return Driver.normalize_dossier_number(value)
+
 
 class DriverNIFSearchQuerySerializer(serializers.Serializer):
     nif = serializers.CharField(
@@ -265,3 +268,5 @@ class DriverNIFSearchQuerySerializer(serializers.Serializer):
         max_length=40,
         trim_whitespace=True,
     )
+
+

@@ -31,11 +31,11 @@ from apps.vehicles.models import Vehicle
 DEMO_PASSWORD = "SmartRoute@123"
 DEMO_DOMAIN = "smartroute.test"
 DEMO_PREFIX = "DEMO-SR"
-DEMO_NIF_PREFIX = "DEMOSR"
+DEMO_NIF_PREFIX = "900"
 DEMO_UUID_NS = UUID("9b2d665b-4f32-4c8f-9ec9-65af5ea3d801")
 JPEG_BYTES = b"\xff\xd8\xff\xe0SMARTROUTE DEMO JPEG\xff\xd9"
 PNG_BYTES = b"\x89PNG\r\n\x1a\nSMARTROUTE DEMO PNG"
-PDF_BYTES = b"%PDF-1.4\n% SmartRoute demo PDF\n%%EOF"
+PDF_BYTES = b"%PDF-1.4\n% SmartRoute PDF\n%%EOF"
 
 
 def demo_uuid(name):
@@ -63,12 +63,17 @@ def split_name(full_name):
     return first, last
 
 
+def demo_nif(value):
+    number = int(demo_uuid(f"nif-{value}").hex[:12], 16) % 1_000_000
+    return Person.normalize_nif(f"900{number:06d}0")
+
+
 class Command(BaseCommand):
-    help = "Reset and seed a complete SmartRoute demo dataset for local/dev only."
+    help = "Reset and seed a complete SmartRoute dataset for local/dev only."
 
     def add_arguments(self, parser):
-        parser.add_argument("--reset", action="store_true", help="Delete existing SmartRoute demo data before seeding.")
-        parser.add_argument("--no-reset", action="store_true", help="Seed/update demo data without deleting existing demo rows.")
+        parser.add_argument("--reset", action="store_true", help="Delete existing SmartRoute data before seeding.")
+        parser.add_argument("--no-reset", action="store_true", help="Seed/update data without deleting existing rows.")
 
     def guard_environment(self):
         module = os.environ.get("DJANGO_SETTINGS_MODULE", "")
@@ -171,10 +176,9 @@ class Command(BaseCommand):
         AgentProfile.objects.filter(user__in=demo_users).delete()
         demo_users.delete()
         demo_persons.delete()
-
     def person(self, key, full_name, nif_suffix=None, birth_date=None):
         first_name, last_name = split_name(full_name)
-        nif = f"{DEMO_PREFIX}-{nif_suffix or key}" if nif_suffix is not None else None
+        nif = demo_nif(nif_suffix or key) if nif_suffix is not None else None
         person, _ = Person.objects.update_or_create(
             nif=nif,
             defaults={"first_name": first_name, "last_name": last_name, "birth_date": birth_date},
@@ -184,12 +188,12 @@ class Command(BaseCommand):
     def seed_users(self):
         User = get_user_model()
         specs = []
-        for i in range(1, 5):
-            specs.append((f"admin{i}", AgentProfile.Role.ADMIN, f"Admin Demo {i}", f"ADM-{i:03d}", "Direction centrale", i != 4))
         for i in range(1, 6):
-            specs.append((f"saisie{i}", AgentProfile.Role.AGENT_SAISIE, f"Saisie Demo {i}", f"SAI-{i:03d}", "Bureau saisie", i != 5))
+            specs.append((f"admin{i}", AgentProfile.Role.ADMIN, f"Admin Demo {i}", f"10-10-10-{i:05d}", "Direction centrale", i != 5))
         for i in range(1, 6):
-            specs.append((f"terrain{i}", AgentProfile.Role.AGENT_TERRAIN, f"Terrain Demo {i}", f"TER-{i:03d}", "Unite terrain", i != 5))
+            specs.append((f"saisie{i}", AgentProfile.Role.AGENT_SAISIE, f"Saisie Demo {i}", f"20-20-20-{i:05d}", "Bureau saisie", i != 5))
+        for i in range(1, 6):
+            specs.append((f"terrain{i}", AgentProfile.Role.AGENT_TERRAIN, f"Terrain Demo {i}", f"30-30-30-{i:05d}", "Unite terrain", i != 5))
         users = {}
         for username, role, full_name, badge, post, active in specs:
             person = self.person(username, full_name, username.upper())
@@ -211,78 +215,68 @@ class Command(BaseCommand):
 
     def seed_owners(self, users):
         creator = users["saisie1"]
-        specs = [
-            ("owner1", "Marie Prophete", "37010001", "Delmas 33", True),
-            ("owner2", "Jacques Civil", "37010002", "Petion-Ville", True),
-            ("owner3", "Nadia Transport", "37010003", "Tabarre", True),
-            ("owner4", "Samuel Commerce", "37010004", "Carrefour", True),
-            ("owner5", "Wideline Augustin", "37010005", "Delmas 75", True),
-            ("owner6", "Carline Joseph", "37010006", "Croix-des-Bouquets", False),
-            ("owner7", "Patrick Louis", "37010007", "Cap-Haitien", True),
-            ("owner8", "Roseline Jean", "37010008", "Gonaives", True),
-            ("owner9", "Micheline Pierre", "37010009", "Leogane", True),
-            ("owner10", "Entreprise Soleil", "37010010", "Port-au-Prince", True),
+        names = [
+            "Marie Prophete", "Jacques Civil", "Nadia Transport", "Samuel Commerce", "Wideline Augustin",
+            "Carline Joseph", "Patrick Louis", "Roseline Jean", "Micheline Pierre", "Entreprise Soleil",
+            "Jean Baptiste", "Therese Noel", "Wilson Pierre", "Caribbean Logistics", "Ruth Saintil",
         ]
+        addresses = ["Delmas 33", "Petion-Ville", "Tabarre", "Carrefour", "Delmas 75", "Croix-des-Bouquets", "Cap-Haitien", "Gonaives", "Leogane", "Port-au-Prince", "Jacmel", "Hinche", "Saint-Marc", "Aeroport", "Kenscoff"]
         owners = {}
-        for key, full_name, phone, address, active in specs:
+        for index, full_name in enumerate(names, start=1):
+            key = f"owner{index}"
             person = self.person(key, full_name, key.upper())
-            owner, _ = Owner.objects.update_or_create(person=person, defaults={"phone": phone, "address": address, "is_active": active, "created_by": creator})
+            owner, _ = Owner.objects.update_or_create(
+                person=person,
+                defaults={"phone": f"3701{index:04d}", "address": addresses[index - 1], "is_active": index not in {6, 15}, "created_by": creator},
+            )
             owners[key] = owner
         return owners
-
     def seed_drivers(self, users, owners, today):
         creator = users["saisie2"]
-        specs = [
-            ("driver1", "Marc Conducteur", "DL-10001", "B", today + timedelta(days=900), "O+"),
-            ("driver2", "Ruben Michel", "DL-10002", "C", today - timedelta(days=20), "A+"),
-            ("driver3", "Elodie Charles", "DL-10003", "B", today + timedelta(days=20), "AB+"),
-            ("driver4", "Sonia Valcin", "DL-10004", "A", None, ""),
-            ("driver5", "Wideline Augustin", "DL-10005", "D", today + timedelta(days=1200), "O-"),
-            ("driver6", "Patrick Louis", "DL-10006", "B", today + timedelta(days=450), "B+"),
-            ("driver7", "Roseline Jean", "DL-10007", "C", today + timedelta(days=730), "A-"),
-            ("driver8", "Andre Sansnif", "DL-10008", "B", today + timedelta(days=365), ""),
-            ("driver9", "Milo Personnel", "DL-10009", "TP", today + timedelta(days=180), "O+"),
-            ("driver10", "Clara Route", "DL-10010", "PL", today - timedelta(days=180), "B-"),
+        names = [
+            "Marc Conducteur", "Ruben Michel", "Elodie Charles", "Sonia Valcin", "Wideline Augustin",
+            "Patrick Louis", "Roseline Jean", "Andre Sansnif", "Milo Personnel", "Clara Route",
+            "Jean Baptiste", "Therese Noel", "Wilson Pierre", "Ruth Saintil", "Lucien Taxi",
         ]
+        license_types = ["B", "C", "B", "A", "D", "B", "C", "B", "TP", "PL", "B", "C", "D", "A", "TP"]
         drivers = {}
-        for key, full_name, dossier, license_type, expires_at, blood in specs:
-            if key == "driver5":
-                person = owners["owner5"].person
-            elif key == "driver6":
-                person = owners["owner7"].person
-            elif key == "driver7":
-                person = owners["owner8"].person
-            elif key == "driver8":
-                person = self.person(key, full_name, key.upper())
+        for index, full_name in enumerate(names, start=1):
+            key = f"driver{index}"
+            if index in {5, 6, 7, 11, 12, 13, 14} and f"owner{index}" in owners:
+                person = owners[f"owner{index}"].person
             else:
-                person = self.person(key, full_name, key.upper(), date(1985, 1, min(int(key[-1]) + 1, 28)))
+                person = self.person(key, full_name, key.upper(), date(1980 + (index % 20), ((index - 1) % 12) + 1, min(index + 1, 28)))
+            expires_at = today + timedelta(days=120 + index * 30)
+            if index in {2, 10, 15}:
+                expires_at = today - timedelta(days=index * 7)
+            if index == 4:
+                expires_at = None
             driver, _ = Driver.objects.update_or_create(
-                dossier_number=dossier,
+                dossier_number=f"DL-{10000 + index:05d}-AA",
                 defaults={
                     "person": person,
-                    "address": "Adresse demo " + dossier,
-                    "sex": Driver.Sex.FEMALE if key in {"driver3", "driver4", "driver5", "driver7", "driver10"} else Driver.Sex.MALE,
-                    "blood_group": blood,
-                    "license_type": license_type,
+                    "address": f"Adresse DL-{10000 + index:05d}-AA",
+                    "sex": Driver.Sex.FEMALE if index in {3, 4, 5, 7, 10, 12, 14} else Driver.Sex.MALE,
+                    "blood_group": ["O+", "A+", "AB+", "", "O-", "B+", "A-", "", "O+", "B-", "A+", "O-", "AB-", "B+", ""][index - 1],
+                    "license_type": license_types[index - 1],
                     "issue_place": "Port-au-Prince",
-                    "issue_date": today - timedelta(days=900),
+                    "issue_date": today - timedelta(days=900 + index),
                     "expires_at": expires_at,
                 },
             )
             drivers[key] = driver
         return drivers
-
     def seed_personal_users(self, drivers, owners):
         User = get_user_model()
-        mapping = [
-            ("personal-only", self.person("personalonly", "Junior Citoyen", "PERSONALONLY")),
-            ("personal-driver", drivers["driver1"].person),
-            ("personal-owner", owners["owner2"].person),
-            ("personal-driver-owner", drivers["driver5"].person),
-            ("personal-no-vehicle", self.person("personalnovehicle", "Celine Sansvehicule", "PERSONALNOVEH")),
+        names = [
+            "Junior Citoyen", "Celine Sansvehicule", "Myrlande Etienne", "Kervens Paul", "Sabrina Joseph",
+            "Daniel Alexis", "Fabienne Louis", "Stanley Noel", "Guerline Petit", "Roberto Charles",
+            "Nancy Auguste", "Herve Simon", "Islande Pierre", "Patrick Mentor", "Stephanie Jean",
         ]
         users = {}
-        for username, person in mapping:
+        for index, full_name in enumerate(names, start=1):
+            username = f"personal{index:02d}"
+            person = self.person(username, full_name, f"PERSONAL{index:02d}")
             user = User.objects.filter(username=username).first() or User(username=username)
             user.person = person
             user.account_type = User.AccountType.PERSONAL
@@ -292,7 +286,6 @@ class Command(BaseCommand):
             user.save()
             users[username] = user
         return users
-
     def seed_vehicles(self, users, owners, today):
         specs = [
             ("SR10001", "Toyota", "Corolla", owners["owner1"], False, today + timedelta(days=180)),
@@ -319,10 +312,10 @@ class Command(BaseCommand):
             )
             if index in {4, 6, 10}:
                 old_owner = owners["owner9"] if owner != owners["owner9"] else owners["owner1"]
-                set_current_vehicle_owner(vehicle=vehicle, owner=old_owner, start_date=today - timedelta(days=700), source_document_reference="DEMO-DATASET-HIST", note="Ancien proprietaire demo.", created_by=users["saisie1"])
-                set_current_vehicle_owner(vehicle=vehicle, owner=owner, start_date=today - timedelta(days=200), source_document_reference="DEMO-DATASET-CURRENT", note="Transfert demo.", created_by=users["saisie1"])
+                set_current_vehicle_owner(vehicle=vehicle, owner=old_owner, start_date=today - timedelta(days=700), source_document_reference="DEMO-DATASET-HIST", note="Ancien proprietaire.", created_by=users["saisie1"])
+                set_current_vehicle_owner(vehicle=vehicle, owner=owner, start_date=today - timedelta(days=200), source_document_reference="DEMO-DATASET-CURRENT", note="Transfert.", created_by=users["saisie1"])
             else:
-                set_current_vehicle_owner(vehicle=vehicle, owner=owner, start_date=today - timedelta(days=365), source_document_reference="DEMO-DATASET-CURRENT", note="Propriete courante demo.", created_by=users["saisie1"])
+                set_current_vehicle_owner(vehicle=vehicle, owner=owner, start_date=today - timedelta(days=365), source_document_reference="DEMO-DATASET-CURRENT", note="Propriete courante.", created_by=users["saisie1"])
             vehicle.refresh_from_db()
             vehicles[plate] = vehicle
         return vehicles
@@ -347,28 +340,30 @@ class Command(BaseCommand):
                 defaults={"vehicle": vehicle, "insurer": "OAVCT Demo", "valid_from": until - timedelta(days=365), "valid_until": until, "status": status},
             )
             policies.append(policy)
-            if vehicle.plate_number == "SR10001":
+            if vehicle.plate_number in {"SR10001", "SR10002"}:
                 old, _ = InsurancePolicy.objects.update_or_create(
-                    policy_number="DEMO-POL-SR10001-OLD",
+                    policy_number=f"DEMO-POL-{vehicle.plate_number}-OLD",
                     defaults={"vehicle": vehicle, "insurer": "OAVCT Demo", "valid_from": today - timedelta(days=730), "valid_until": today - timedelta(days=366), "status": InsurancePolicy.Status.EXPIRED},
                 )
                 policies.append(old)
         return policies
 
     def seed_documents(self, users, vehicles):
-        specs = [
-            ("SR10001", Document.DocumentType.INSURANCE_COPY, "Assurance SR10001", "assurance-sr10001.pdf", PDF_BYTES, "application/pdf"),
-            ("SR10002", Document.DocumentType.REGISTRATION_COPY, "Carte grise SR10002", "carte-sr10002.pdf", PDF_BYTES, "application/pdf"),
-            ("SR10003", Document.DocumentType.VEHICLE_PHOTO, "Photo moto SR10003", "photo-sr10003.jpg", JPEG_BYTES, "image/jpeg"),
-            ("SR10004", Document.DocumentType.VEHICLE_PHOTO, "Photo camion SR10004", "photo-sr10004.png", PNG_BYTES, "image/png"),
-            ("SR10006", Document.DocumentType.INSPECTION_COPY, "Inspection SR10006", "inspection-sr10006.pdf", PDF_BYTES, "application/pdf"),
-            ("SR10011", Document.DocumentType.SUPPORTING_DOCUMENT, "Autorisation administrative", "autorisation-sr10011.pdf", PDF_BYTES, "application/pdf"),
+        doc_cycle = [
+            (Document.DocumentType.INSURANCE_COPY, "Assurance", "application/pdf", PDF_BYTES, "pdf"),
+            (Document.DocumentType.REGISTRATION_COPY, "Carte grise", "application/pdf", PDF_BYTES, "pdf"),
+            (Document.DocumentType.VEHICLE_PHOTO, "Photo vehicule", "image/jpeg", JPEG_BYTES, "jpg"),
+            (Document.DocumentType.INSPECTION_COPY, "Inspection", "application/pdf", PDF_BYTES, "pdf"),
+            (Document.DocumentType.SUPPORTING_DOCUMENT, "Document support", "application/pdf", PDF_BYTES, "pdf"),
         ]
         docs = []
-        for plate, doc_type, title, filename, content, mime in specs:
-            document = Document.objects.filter(vehicle=vehicles[plate], title=title).first()
+        for index, (plate, vehicle) in enumerate(vehicles.items(), start=1):
+            doc_type, label, mime, content, ext = doc_cycle[(index - 1) % len(doc_cycle)]
+            title = f"{label} {plate}"
+            document = Document.objects.filter(vehicle=vehicle, title=title).first()
+            filename = f"{label.lower().replace(' ', '-')}-{plate.lower()}.{ext}"
             if document is None:
-                document = Document(vehicle=vehicles[plate], document_type=doc_type, title=title, uploaded_by=users["saisie1"], mime_type=mime, size_bytes=len(content))
+                document = Document(vehicle=vehicle, document_type=doc_type, title=title, uploaded_by=users["saisie1"], mime_type=mime, size_bytes=len(content))
                 document.file.save(filename, ContentFile(content), save=True)
             else:
                 document.uploaded_by = users["saisie1"]
@@ -378,7 +373,6 @@ class Command(BaseCommand):
                 document.save()
             docs.append(document)
         return docs
-
     def seed_tickets(self, users, drivers, vehicles, infractions):
         tickets = []
         terrain = [users["terrain1"], users["terrain2"], users["terrain3"], users["terrain4"]]
@@ -390,7 +384,7 @@ class Command(BaseCommand):
             agent = terrain[(i - 1) % len(terrain)]
             ticket, _ = Ticket.objects.update_or_create(
                 client_uuid=demo_uuid(f"ticket-{i:02d}"),
-                defaults={"opened_by": agent, "driver": driver, "status": Ticket.Status.OPEN, "note": f"PV demo {i:02d}"},
+                defaults={"opened_by": agent, "driver": driver, "status": Ticket.Status.OPEN, "note": f"PV {i:02d}"},
             )
             set_timestamps(ticket, days_ago=i % 14, hour=8 + (i % 9), minute=10)
             verbalization_count = 2 if i in {3, 7, 12, 18} else 1
@@ -399,34 +393,40 @@ class Command(BaseCommand):
                 verbalization, _ = TicketVerbalization.objects.update_or_create(
                     ticket=ticket,
                     sequence_number=seq,
-                    defaults={"agent": agent, "vehicle": vehicle, "plate_number_snapshot": vehicle.plate_number, "occurred_at": demo_datetime(i % 14, 8 + (i % 9), 5 + seq), "location_label": f"Controle demo zone {seq}", "latitude": Decimal("18.539200"), "longitude": Decimal("-72.336400"), "note": f"Verbalisation demo {i:02d}-{seq}"},
+                    defaults={"agent": agent, "vehicle": vehicle, "plate_number_snapshot": vehicle.plate_number, "occurred_at": demo_datetime(i % 14, 8 + (i % 9), 5 + seq), "location_label": f"Controle zone {seq}", "latitude": Decimal("18.539200"), "longitude": Decimal("-72.336400"), "note": f"Verbalisation {i:02d}-{seq}"},
                 )
                 for infraction in infractions[: 2 if i % 4 == 0 else 1]:
                     TicketInfraction.objects.update_or_create(verbalization=verbalization, infraction=infraction, defaults={})
             if status == Ticket.Status.CLOSED:
                 ticket.status = Ticket.Status.CLOSED
                 ticket.closed_by = agent
-                ticket.closure_reason = "Reglement demo"
+                ticket.closure_reason = "Reglement"
                 ticket.save()
             elif status == Ticket.Status.CANCELLED:
                 ticket.status = Ticket.Status.CANCELLED
                 ticket.cancelled_by = agent
-                ticket.cancellation_reason = "Annulation demo"
+                ticket.cancellation_reason = "Annulation"
                 ticket.save()
             tickets.append(ticket)
         return tickets
 
     def seed_ticket_proofs(self, users, tickets):
         proofs = []
-        for ticket in tickets[:8]:
+        for index, ticket in enumerate(tickets[:15], start=1):
             verbalization = ticket.verbalizations.order_by("sequence_number").first()
             proof = verbalization.proofs.first()
             if proof is None:
-                proof = TicketProof.objects.create(verbalization=verbalization, evidence_type=TicketProof.EvidenceType.PHOTO, mime_type="image/jpeg", size_bytes=len(JPEG_BYTES), caption="Preuve photo demo", created_by=users["terrain1"])
-                proof.file.save(f"proof-{ticket.ticket_number}.jpg", ContentFile(JPEG_BYTES), save=True)
+                proof = TicketProof.objects.create(
+                    verbalization=verbalization,
+                    evidence_type=TicketProof.EvidenceType.PHOTO if index % 3 else TicketProof.EvidenceType.AUDIO,
+                    mime_type="image/jpeg" if index % 3 else "audio/mp4",
+                    size_bytes=len(JPEG_BYTES),
+                    caption=f"Preuve demo {index:02d}",
+                    created_by=users["terrain1"],
+                )
+                proof.file.save(f"proof-{ticket.ticket_number}-{index:02d}.jpg", ContentFile(JPEG_BYTES), save=True)
             proofs.append(proof)
         return proofs
-
     def seed_alerts(self, users, vehicles, drivers, today):
         specs = [
             ("STOLEN_MOTO", "saisie1", Alert.Category.ADMINISTRATIVE, Alert.AlertType.STOLEN_PLATE, Alert.Severity.CRITICAL, Alert.Status.ACTIVE, vehicles["SR10013"], "Plaque volee signalee sur moto administrative."),
@@ -443,11 +443,11 @@ class Command(BaseCommand):
             ("DOCUMENT_WARNING_PICKUP", "saisie3", Alert.Category.ADMINISTRATIVE, Alert.AlertType.DOCUMENT_EXPIRY_WARNING, Alert.Severity.INFO, Alert.Status.ACTIVE, vehicles["SR10015"], "Document proche de l'expiration."),
             ("DOCUMENT_WARNING_COUNTY", "saisie4", Alert.Category.ADMINISTRATIVE, Alert.AlertType.DOCUMENT_EXPIRY_WARNING, Alert.Severity.INFO, Alert.Status.ACTIVE, vehicles["SR10007"], "Carte grise a verifier prochainement."),
             ("DOCUMENT_WARNING_AVEO", "saisie5", Alert.Category.ADMINISTRATIVE, Alert.AlertType.DOCUMENT_EXPIRY_WARNING, Alert.Severity.INFO, Alert.Status.ACTIVE, vehicles["SR10012"], "Assurance a renouveler prochainement."),
-            ("JUDICIAL_ADMIN", "admin2", Alert.Category.ADMINISTRATIVE, Alert.AlertType.JUDICIAL_ALERT, Alert.Severity.WARNING, Alert.Status.ACTIVE, vehicles["SR10011"], "Alerte judiciaire administrative a verifier."),
-            ("JUDICIAL_OWNER", "admin3", Alert.Category.ADMINISTRATIVE, Alert.AlertType.JUDICIAL_ALERT, Alert.Severity.CRITICAL, Alert.Status.ACTIVE, vehicles["SR10010"], "Dossier judiciaire prioritaire lie au vehicule."),
+            ("JUDICIAL_ADMIN", "admin2", Alert.Category.ADMINISTRATIVE, Alert.AlertType.JUDICIAL, Alert.Severity.WARNING, Alert.Status.ACTIVE, vehicles["SR10011"], "Alerte judiciaire administrative a verifier."),
+            ("JUDICIAL_OWNER", "admin3", Alert.Category.ADMINISTRATIVE, Alert.AlertType.JUDICIAL, Alert.Severity.CRITICAL, Alert.Status.ACTIVE, vehicles["SR10010"], "Dossier judiciaire prioritaire lie au vehicule."),
             ("INFO_CONTROL", "terrain1", Alert.Category.FIELD_REPORT, Alert.AlertType.SUSPICIOUS_BEHAVIOR, Alert.Severity.INFO, Alert.Status.ACTIVE, vehicles["SR10001"], "Controle informatif ajoute au dossier de suivi."),
             ("INFO_PATROL", "terrain4", Alert.Category.FIELD_REPORT, Alert.AlertType.SUSPICIOUS_BEHAVIOR, Alert.Severity.INFO, Alert.Status.ACTIVE, vehicles["SR10003"], "Observation terrain sans action immediate."),
-            ("RESOLVED_WANTED", "saisie1", Alert.Category.ADMINISTRATIVE, Alert.AlertType.WANTED_VEHICLE, Alert.Severity.WARNING, Alert.Status.RESOLVED, vehicles["SR10010"], "Alerte resolue demo."),
+            ("RESOLVED_WANTED", "saisie1", Alert.Category.ADMINISTRATIVE, Alert.AlertType.WANTED_VEHICLE, Alert.Severity.WARNING, Alert.Status.RESOLVED, vehicles["SR10010"], "Alerte resolue."),
             ("CANCELLED_REFUSED", "terrain2", Alert.Category.FIELD_REPORT, Alert.AlertType.REFUSED_CONTROL, Alert.Severity.INFO, Alert.Status.CANCELLED, vehicles["SR10003"], "Signalement annule apres verification terrain."),
         ]
         alerts = []
@@ -493,14 +493,24 @@ class Command(BaseCommand):
 
     def seed_delits(self, users, drivers, vehicles, tickets, alerts, scans, infractions):
         if not all(self.table_exists(model) for model in (DelitType, DelitCase, DelitAction, DelitEvidence)):
-            self.stdout.write("Delits demo skipped: delits tables are not migrated in this database.")
+            self.stdout.write("Delits skipped: delits tables are not migrated in this database.")
             return []
         type_specs = [
-            ("DEMO_DANGEROUS_DRIVING", "Conduite dangereuse demo", "Manoeuvre dangereuse constatee pendant un controle.", "Code routier demo", 10),
-            ("DEMO_HIT_AND_RUN", "Fuite apres accident demo", "Depart du conducteur apres un accident ou dommage constate.", "Code routier demo", 20),
-            ("DEMO_DOCUMENT_FRAUD", "Fraude documentaire demo", "Document falsifie, incoherent ou presente comme authentique.", "Code penal demo", 30),
-            ("DEMO_REFUSED_ORDER", "Refus d'obtemperer demo", "Refus d'executer une injonction reguliere d'un agent.", "Code routier demo", 40),
-            ("DEMO_RECKLESS_ENDANGERMENT", "Mise en danger demo", "Comportement exposant les usagers a un risque grave.", "Code penal demo", 50),
+            ("DANGEROUS_DRIVING", "Conduite dangereuse", "Manoeuvre dangereuse constatee pendant un controle.", "Code routier", 10),
+            ("HIT_AND_RUN", "Fuite apres accident", "Depart du conducteur apres un accident ou dommage constate.", "Code routier", 20),
+            ("DOCUMENT_FRAUD", "Fraude documentaire", "Document falsifie, incoherent ou presente comme authentique.", "Code penal :", 30),
+            ("REFUSED_ORDER", "Refus d'obtemperer", "Refus d'executer une injonction reguliere d'un agent.", "Code routier", 40),
+            ("RECKLESS_ENDANGERMENT", "Mise en danger", "Comportement exposant les usagers a un risque grave.", "Code penal :", 50),
+            ("ROAD_INFRASTRUCTURE_DAMAGE", "Atteinte a la voie publique", "Degradation ou obstruction d'une infrastructure routiere.", "Code penal :", 60),
+            ("PLATE_TAMPERING", "Manipulation de plaque", "Usage, transfert ou alteration suspecte de plaque.", "Code routier", 70),
+            ("PERMIT_MISUSE", "Usage abusif de permis", "Pret, usage ou presentation irreguliere d'un permis.", "Code routier", 80),
+            ("PUBLIC_TRANSPORT_ENDANGERMENT", "Transport public dangereux", "Mise en danger de passagers dans un transport public.", "Code routier", 90),
+            ("IMPAIRED_DRIVING", "Conduite en etat d'ebriete", "Conduite sous influence constatee ou suspectee.", "Code routier", 100),
+            ("SIGNALING_DAMAGE", "Atteinte a la signalisation", "Panneau enleve, degrade ou altere.", "Code penal :", 110),
+            ("INSPECTION_FRAUD", "Fraude inspection", "Fiche d'inspection deterioree, absente ou manipulee.", "Code routier", 120),
+            ("REPEAT_DANGEROUS_OFFENSE", "Recidive de conduite dangereuse", "Accumulation d'infractions graves sur un meme controle.", "Code routier", 130),
+            ("VEHICLE_IDENTITY_FRAUD", "Fraude identite vehicule", "Incoherence plaque, carte ou description du vehicule.", "Code penal :", 140),
+            ("AUTHORITY_OBSTRUCTION", "Obstacle a l'autorite", "Comportement entravant l'action reguliere d'un agent.", "Code penal :", 150),
         ]
         delit_types = {}
         for code, label, description, legal_basis, display_order in type_specs:
@@ -509,33 +519,66 @@ class Command(BaseCommand):
                 defaults={"label": label, "description": description, "legal_basis": legal_basis, "active": True, "display_order": display_order},
             )
             delit_types[code] = item
-        delit_type = delit_types["DEMO_DANGEROUS_DRIVING"]
+
         cases = []
-        specs = [
-            ("OPEN", DelitCase.QualificationStatus.POTENTIAL, DelitCase.ProcedureStatus.OPEN, vehicles["SR10004"], drivers["driver1"], tickets[0], alerts[0]),
-            ("REVIEW", DelitCase.QualificationStatus.UNDER_REVIEW, DelitCase.ProcedureStatus.ACTION_TAKEN, vehicles["SR10013"], drivers["driver2"], tickets[1], alerts[1]),
-            ("CONFIRMED", DelitCase.QualificationStatus.CONFIRMED, DelitCase.ProcedureStatus.CLOSED, vehicles["SR10002"], drivers["driver3"], tickets[2], alerts[2]),
+        type_values = list(delit_types.values())
+        vehicle_values = list(vehicles.values())
+        driver_values = list(drivers.values())
+        status_pairs = [
+            (DelitCase.QualificationStatus.POTENTIAL, DelitCase.ProcedureStatus.OPEN),
+            (DelitCase.QualificationStatus.UNDER_REVIEW, DelitCase.ProcedureStatus.ACTION_TAKEN),
+            (DelitCase.QualificationStatus.CONFIRMED, DelitCase.ProcedureStatus.CLOSED),
         ]
-        for key, q_status, p_status, vehicle, driver, ticket, alert in specs:
-            defaults = {"delit_type": delit_type, "source_type": DelitCase.SourceType.TICKET, "ticket": ticket, "verbalization": ticket.verbalizations.first(), "alert": alert, "infraction": infractions[0], "driver": driver, "vehicle": vehicle, "facts": f"Faits demo suffisamment detailles pour {key}.", "detected_by": users["terrain1"], "location_label": "Zone demo", "qualification_status": q_status, "procedure_status": p_status}
+        for index in range(1, 16):
+            q_status, p_status = status_pairs[(index - 1) % len(status_pairs)]
+            vehicle = vehicle_values[(index - 1) % len(vehicle_values)]
+            driver = driver_values[(index - 1) % len(driver_values)]
+            ticket = tickets[(index - 1) % len(tickets)]
+            alert = alerts[(index - 1) % len(alerts)]
+            delit_type = type_values[(index - 1) % len(type_values)]
+            infraction = infractions[(index - 1) % len(infractions)]
+            defaults = {
+                "delit_type": delit_type,
+                "source_type": DelitCase.SourceType.TICKET,
+                "ticket": ticket,
+                "verbalization": ticket.verbalizations.first(),
+                "alert": alert,
+                "infraction": infraction,
+                "driver": driver,
+                "vehicle": vehicle,
+                "plate_number_snapshot": vehicle.plate_number,
+                "facts": f"Faits demo suffisamment detailles pour dossier delit {index:02d}.",
+                "detected_by": users[f"terrain{((index - 1) % 5) + 1}"],
+                "location_label": f"Zone controle delit {index:02d}",
+                "latitude": Decimal("18.539200"),
+                "longitude": Decimal("-72.336400"),
+                "qualification_status": q_status,
+                "procedure_status": p_status,
+            }
             if q_status == DelitCase.QualificationStatus.CONFIRMED:
-                defaults.update({"reviewed_by": users["admin1"], "reviewed_at": timezone.now(), "review_note": "Qualification confirmee demo.", "closed_by": users["admin1"], "closed_at": timezone.now(), "closure_reason": "Dossier cloture demo."})
-            case, _ = DelitCase.objects.update_or_create(deduplication_key=f"DEMO-DATASET:DELIT:{key}", defaults=defaults)
-            DelitAction.objects.update_or_create(case=case, action_type=DelitAction.ActionType.IDENTITY_CHECK, defaults={"performed_by": users["terrain1"], "description": "Controle effectue dans le cadre du dossier demo."})
+                defaults.update({"reviewed_by": users["admin1"], "reviewed_at": timezone.now(), "review_note": "Qualification confirmee.", "closed_by": users["admin1"], "closed_at": timezone.now(), "closure_reason": "Dossier cloture."})
+            case, _ = DelitCase.objects.update_or_create(deduplication_key=f"DEMO-DATASET:DELIT:{index:02d}", defaults=defaults)
+            DelitAction.objects.update_or_create(case=case, action_type=DelitAction.ActionType.IDENTITY_CHECK, defaults={"performed_by": defaults["detected_by"], "description": "Controle effectue dans le cadre du dossier."})
             if not case.evidence.exists():
-                DelitEvidence.objects.create(case=case, scan=scans[0], evidence_type=DelitEvidence.EvidenceType.PHOTO, mime_type="image/jpeg", size_bytes=len(JPEG_BYTES), created_by=users["terrain1"])
+                DelitEvidence.objects.create(case=case, scan=scans[(index - 1) % len(scans)], evidence_type=DelitEvidence.EvidenceType.PHOTO, mime_type="image/jpeg", size_bytes=len(JPEG_BYTES), created_by=defaults["detected_by"])
             cases.append(case)
         return cases
-
     def seed_sync_logs(self, users):
         sessions = []
-        for index, username in enumerate(["terrain1", "terrain2", "saisie1"], start=1):
+        usernames = ["terrain1", "terrain2", "terrain3", "terrain4", "saisie1", "saisie2", "saisie3", "saisie4", "admin1", "admin2", "terrain1", "terrain2", "saisie1", "saisie2", "admin3"]
+        for index, username in enumerate(usernames, start=1):
             user = users[username]
-            device, _ = SyncDevice.objects.update_or_create(device_uuid=demo_uuid(f"device-{username}"), user=user, defaults={"device_name": f"Demo device {username}", "platform": SyncDevice.Platform.ANDROID, "app_version": "1.0-demo"})
-            session, _ = SyncSession.objects.update_or_create(request_uuid=demo_uuid(f"sync-{username}"), defaults={"device": device, "user": user, "direction": SyncSession.Direction.PUSH if index < 3 else SyncSession.Direction.PULL, "status": [SyncSession.Status.SUCCESS, SyncSession.Status.PENDING, SyncSession.Status.FAILED][index - 1], "item_count": 10 * index, "success_count": 8 * index})
+            device, _ = SyncDevice.objects.update_or_create(
+                device_uuid=demo_uuid(f"device-{username}-{index:02d}"),
+                user=user,
+                defaults={"device_name": f"Demo device {username} {index:02d}", "platform": SyncDevice.Platform.ANDROID, "app_version": "1.0-demo"},
+            )
+            session, _ = SyncSession.objects.update_or_create(
+                request_uuid=demo_uuid(f"sync-{username}-{index:02d}"),
+                defaults={"device": device, "user": user, "direction": SyncSession.Direction.PUSH if index % 2 else SyncSession.Direction.PULL, "status": [SyncSession.Status.SUCCESS, SyncSession.Status.PENDING, SyncSession.Status.FAILED][(index - 1) % 3], "item_count": 5 * index, "success_count": max(0, 5 * index - (index % 4))},
+            )
             sessions.append(session)
         return sessions
-
     def print_summary(self, counts, users):
         self.stdout.write(self.style.SUCCESS("Dataset SmartRoute reinitialise avec succes."))
         self.stdout.write("\nCrees :")
@@ -544,4 +587,8 @@ class Command(BaseCommand):
         self.stdout.write("\nComptes de test :")
         for username in ["admin1", "admin2", "saisie1", "saisie2", "terrain1", "terrain2", "terrain3"]:
             self.stdout.write(f"- {users[username].email} / {DEMO_PASSWORD} / {users[username].agent_profile.role}")
-        self.stdout.write("\nMot de passe demo uniquement local/dev, jamais production.")
+        self.stdout.write("\nMot de passe uniquement local/dev, jamais production.")
+
+
+
+

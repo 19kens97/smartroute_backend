@@ -41,8 +41,11 @@ def find_open_ticket(*, driver=None, dossier_number=None, nif=None, ticket_numbe
     if driver is not None:
         return queryset.filter(driver=driver).order_by("-opened_at", "-id").first()
     if dossier_number:
+        from apps.drivers.models import Driver
+
+        normalized_dossier = Driver.normalize_dossier_number(dossier_number)
         return queryset.filter(
-            driver_dossier_snapshot__iexact=str(dossier_number).strip()
+            driver_dossier_snapshot__iexact=normalized_dossier
         ).order_by("-opened_at", "-id").first()
     if nif:
         return queryset.filter(
@@ -153,3 +156,5 @@ def build_unpaid_ticket_summary(tickets):
         "alert": summary["alert"],
         "items": summary["items"],
     }
+
+

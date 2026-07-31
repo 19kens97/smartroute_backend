@@ -33,10 +33,10 @@ class DemoDatasetCommandTests(TestCase):
 
         User = get_user_model()
         self.assertGreaterEqual(User.objects.filter(email__endswith="@smartroute.test", account_type=User.AccountType.PROFESSIONAL).count(), 14)
-        self.assertGreaterEqual(User.objects.filter(account_type=User.AccountType.PERSONAL, person__nif__startswith="DEMOSR").count(), 5)
+        self.assertGreaterEqual(User.objects.filter(account_type=User.AccountType.PERSONAL, person__nif__startswith="900").count(), 5)
         self.assertGreaterEqual(AgentProfile.objects.filter(user__email__endswith="@smartroute.test").count(), 14)
         self.assertGreaterEqual(Driver.objects.filter(dossier_number__startswith="DL-100").count(), 10)
-        self.assertGreaterEqual(Owner.objects.filter(person__nif__startswith="DEMOSR").count(), 5)
+        self.assertGreaterEqual(Owner.objects.filter(person__nif__startswith="900").count(), 5)
         self.assertGreaterEqual(Vehicle.objects.filter(plate_number__startswith="SR").count(), 15)
         self.assertGreaterEqual(Scan.objects.count(), 30)
         self.assertGreaterEqual(Ticket.objects.count(), 20)
@@ -51,13 +51,15 @@ class DemoDatasetCommandTests(TestCase):
             self.assertLessEqual(VehicleOwnership.objects.filter(vehicle=vehicle, is_current=True).count(), 1)
 
         counts = {
-            "persons": Person.objects.filter(nif__startswith="DEMOSR").count(),
+            "persons": Person.objects.filter(nif__startswith="900").count(),
             "vehicles": Vehicle.objects.filter(plate_number__startswith="SR").count(),
             "tickets": Ticket.objects.count(),
             "scans": Scan.objects.count(),
         }
         self.run_seed()
-        self.assertEqual(counts["persons"], Person.objects.filter(nif__startswith="DEMOSR").count())
+        self.assertEqual(counts["persons"], Person.objects.filter(nif__startswith="900").count())
         self.assertEqual(counts["vehicles"], Vehicle.objects.filter(plate_number__startswith="SR").count())
         self.assertEqual(counts["tickets"], Ticket.objects.count())
         self.assertEqual(counts["scans"], Scan.objects.count())
+
+

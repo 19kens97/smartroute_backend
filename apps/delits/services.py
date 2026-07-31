@@ -14,16 +14,35 @@ def generate_case_number():
     raise RuntimeError("Impossible de générer un numéro de dossier unique.")
 
 
-def build_deduplication_key(*, delit_type_id, scan_id=None, verbalization_id=None, alert_id=None, driver_id=None, vehicle_id=None, client_uuid=None):
+def build_deduplication_key(*, delit_type_id, scan_id=None, verbalization_id=None, alert_id=None, driver_id=None, vehicle_id=None, plate_number_snapshot='', client_uuid=None):
     if client_uuid:
         return f"CLIENT:{client_uuid}"
-    raw = '|'.join(str(v or '') for v in [delit_type_id,scan_id,verbalization_id,alert_id,driver_id,vehicle_id])
-    if not any([scan_id,verbalization_id,alert_id]):
+    plate = (plate_number_snapshot or '').strip().upper()
+    raw = '|'.join(str(v or '') for v in [delit_type_id,scan_id,verbalization_id,alert_id,driver_id,vehicle_id,plate])
+    if not any([scan_id,verbalization_id,alert_id,plate]):
         return ''
     return hashlib.sha256(raw.encode('utf-8')).hexdigest()
 
 
-def create_potential_delit_case(*, detected_by, delit_type, source_type, facts, client_uuid=None, **context):
+def infer_source_type(*, verbalization=None, ticket=None, alert=None, scan=None, driver=None, vehicle=None, plate_number_snapshot=''):
+    if verbalization is not None:
+        return DelitCase.SourceType.VERBALIZATION
+    if ticket is not None:
+        return DelitCase.SourceType.TICKET
+    if alert is not None:
+        return DelitCase.SourceType.ALERT
+    if scan is not None or plate_number_snapshot:
+        return DelitCase.SourceType.PLATE_SCAN
+    if driver is not None:
+        return DelitCase.SourceType.DRIVER_SEARCH
+    if vehicle is not None:
+        return DelitCase.SourceType.VEHICLE_CONTROL
+    return DelitCase.SourceType.MANUAL_OBSERVATION
+
+
+def create_potential_delit_case(*, detected_by, delit_type, facts, source_type=None, client_uuid=None, **context):
+    source_context = {key: context.get(key) for key in ('verbalization','ticket','alert','scan','driver','vehicle','plate_number_snapshot')}
+    resolved_source_type = source_type or infer_source_type(**source_context)
     key = build_deduplication_key(
         delit_type_id=delit_type.pk,
         scan_id=getattr(context.get('scan'),'pk',None),
@@ -31,6 +50,7 @@ def create_potential_delit_case(*, detected_by, delit_type, source_type, facts, 
         alert_id=getattr(context.get('alert'),'pk',None),
         driver_id=getattr(context.get('driver'),'pk',None),
         vehicle_id=getattr(context.get('vehicle'),'pk',None),
+        plate_number_snapshot=context.get('plate_number_snapshot',''),
         client_uuid=client_uuid,
     )
     if key:
@@ -41,7 +61,7 @@ def create_potential_delit_case(*, detected_by, delit_type, source_type, facts, 
         case = DelitCase.objects.create(
             detected_by=detected_by,
             delit_type=delit_type,
-            source_type=source_type,
+            source_type=resolved_source_type,
             facts=facts,
             client_uuid=client_uuid or secrets.token_hex(16),
             deduplication_key=key,
@@ -77,3 +97,5 @@ def transition_case(case, *, actor, qualification_status=None, procedure_status=
         reason=reason,
     )
     return case
+
+

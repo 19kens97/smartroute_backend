@@ -123,6 +123,20 @@ class ProfessionalLoginSerializer(serializers.Serializer):
         return attrs
 
 
+class MobileLoginSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=False)
+    username = serializers.CharField(required=False, allow_blank=False)
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate(self, attrs):
+        identifier = attrs.get("email") or attrs.get("username")
+        if not identifier:
+            raise serializers.ValidationError({"email": "Email requis."})
+
+        attrs["email"] = identifier.strip().lower()
+        return attrs
+
+
 class PersonalLoginSerializer(serializers.Serializer):
     dossier_number = serializers.CharField(max_length=50)
     password = serializers.CharField(write_only=True, trim_whitespace=False)

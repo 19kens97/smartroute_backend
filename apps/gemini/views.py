@@ -11,8 +11,9 @@ from google.api_core import exceptions
 from google.genai import errors as genai_errors
 from google.genai import types
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
 from rest_framework import serializers
+
+from apps.accounts.permissions import IsAgentTerrain
 
 from apps.insurance.models import InsurancePolicy
 from apps.media_storage.services import MEDIA_TYPE_IMAGE, get_image_limits, validate_uploaded_media
@@ -249,7 +250,7 @@ def mark_scan_error(scan_entry, error_code: str):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAgentTerrain])
 def extract_license_plate(request):
     image_file = request.FILES.get("image")
     if not image_file:
@@ -318,7 +319,7 @@ def extract_license_plate(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAgentTerrain])
 def get_last_scan(request):
     last_scan = GeminiScan.objects.select_related("vehicle", "vehicle__owner", "vehicle__owner__person").filter(agent=request.user).order_by("-scanned_at").first()
     if not last_scan:
@@ -327,7 +328,7 @@ def get_last_scan(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAgentTerrain])
 def search_plate(request):
     plate_raw = (request.query_params.get("plate_number") or "").strip()
     if not plate_raw:

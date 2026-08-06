@@ -16,17 +16,17 @@ class DocumentApiTests(APITestCase):
         self.admin = self._create_professional_user(
             "admin.documents@example.com",
             AgentProfile.Role.ADMIN,
-            "DOC-ADMIN-001",
+            "93-00-00-00001",
         )
         self.terrain = self._create_professional_user(
             "terrain.documents@example.com",
             AgentProfile.Role.AGENT_TERRAIN,
-            "DOC-TERRAIN-001",
+            "93-00-00-00003",
         )
         self.saisie = self._create_professional_user(
             "saisie.documents@example.com",
             AgentProfile.Role.AGENT_SAISIE,
-            "DOC-SAISIE-001",
+            "93-00-00-00002",
         )
         self.personal = self._create_personal_user()
 
@@ -55,7 +55,7 @@ class DocumentApiTests(APITestCase):
     ):
         User = get_user_model()
         person = Person.objects.create(
-            nif=badge_number,
+            nif="95" + "".join(ch for ch in badge_number if ch.isdigit())[-8:],
             first_name=role,
             last_name="Documents",
         )
@@ -76,7 +76,7 @@ class DocumentApiTests(APITestCase):
     def _create_personal_user(self):
         User = get_user_model()
         person = Person.objects.create(
-            nif="DOC-PERSONAL-001",
+            nif="9300000004",
             first_name="Personal",
             last_name="Documents",
         )

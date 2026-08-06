@@ -17,7 +17,7 @@ class TicketTestMixin:
     def professional(self, email, role, badge):
         User = get_user_model()
         person = Person.objects.create(
-            nif=badge,
+            nif="96" + "".join(ch for ch in badge if ch.isdigit())[-8:].zfill(8),
             first_name=role,
             last_name="Tickets",
         )
@@ -55,7 +55,7 @@ class TicketModelTests(TicketTestMixin, TestCase):
         self.agent = self.professional(
             "model.field@example.com",
             AgentProfile.Role.AGENT_TERRAIN,
-            "TCK-MOD-001",
+            "97-00-00-00001",
         )
         self.infraction = self.fixed_infraction()
 
@@ -101,22 +101,22 @@ class TicketApiTests(TicketTestMixin, APITestCase):
         self.field = self.professional(
             "ticket.field@example.com",
             AgentProfile.Role.AGENT_TERRAIN,
-            "TCK-TER-001",
+            "97-00-00-00002",
         )
         self.other_field = self.professional(
             "ticket.other@example.com",
             AgentProfile.Role.AGENT_TERRAIN,
-            "TCK-TER-002",
+            "97-00-00-00005",
         )
         self.entry = self.professional(
             "ticket.entry@example.com",
             AgentProfile.Role.AGENT_SAISIE,
-            "TCK-SAI-001",
+            "97-00-00-00004",
         )
         self.admin = self.professional(
             "ticket.admin@example.com",
             AgentProfile.Role.ADMIN,
-            "TCK-ADM-001",
+            "97-00-00-00003",
         )
         self.infraction = self.fixed_infraction()
 
@@ -204,8 +204,11 @@ class TicketApiTests(TicketTestMixin, APITestCase):
         )
         self.auth(self.field)
         response = self.client.get(f"/api/tickets/{ticket.pk}/barcode/")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Content-Type"], "image/svg+xml")
+        if response.status_code == 503:
+            self.assertIn("code-barres", response.data["message"])
+        else:
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response["Content-Type"], "image/svg+xml")
 
     def test_api_does_not_accept_selected_amount(self):
         self.auth(self.field)

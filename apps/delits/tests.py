@@ -9,10 +9,10 @@ from .services import create_potential_delit_case, infer_source_type
 class DelitServiceTests(TestCase):
     def setUp(self):
         User=get_user_model()
-        person=Person.objects.create(nif='DEL-AGT-1',first_name='Agent',last_name='Terrain')
+        person=Person.objects.create(nif='9900000001',first_name='Agent',last_name='Terrain')
         self.user=User.objects.create_user(person=person,account_type=User.AccountType.PROFESSIONAL,email='delit.agent@example.com',password='Pass1234!')
-        AgentProfile.objects.create(user=self.user,role=AgentProfile.Role.AGENT_TERRAIN,badge_number='DEL-AGT-1',is_active=True)
-        driver_person=Person.objects.create(nif='DE-10001-LT',first_name='Conducteur',last_name='Test')
+        AgentProfile.objects.create(user=self.user,role=AgentProfile.Role.AGENT_TERRAIN,badge_number='99-00-00-00001',is_active=True)
+        driver_person=Person.objects.create(nif='9900000002',first_name='Conducteur',last_name='Test')
         self.driver=Driver.objects.create(person=driver_person,dossier_number='DE-10001-LT',license_type='B')
         self.type, _ = DelitType.objects.get_or_create(code='HIT_AND_RUN', defaults={'label':'Fuite apres accident'})
 
@@ -68,6 +68,6 @@ class DelitServiceTests(TestCase):
         self.assertEqual(case.dcpj_status, DelitCase.DCPJStatus.ACKNOWLEDGED)
         self.assertTrue(case.dcpj_reference.startswith('DCPJ-DEMO-'))
         self.assertEqual(response['reference'], case.dcpj_reference)
-        self.assertEqual(case.dcpj_payload_snapshot['agent']['matricule'], 'DEL-AGT-1')
+        self.assertEqual(case.dcpj_payload_snapshot['agent']['matricule'], '99-00-00-00001')
         self.assertEqual(case.dcpj_payload_snapshot['conducteur']['numero_dossier_permis'], 'DE-10001-LT')
         self.assertEqual(case.dcpj_payload_snapshot['vehicule']['immatriculation'], 'AA-12345')

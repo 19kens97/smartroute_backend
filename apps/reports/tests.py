@@ -11,7 +11,7 @@ class ReportsPermissionTests(APITestCase):
     def create_professional(self, email, role, badge):
         User = get_user_model()
         person = Person.objects.create(
-            nif=f"NIF-{badge}",
+            nif="88" + "".join(ch for ch in badge if ch.isdigit())[-8:].zfill(8),
             first_name=role,
             last_name="Reports",
         )
@@ -32,7 +32,7 @@ class ReportsPermissionTests(APITestCase):
     def create_personal(self):
         User = get_user_model()
         person = Person.objects.create(
-            nif="NIF-REPORT-PERSONAL",
+            nif="8700000004",
             first_name="Personal",
             last_name="Reports",
         )
@@ -47,17 +47,17 @@ class ReportsPermissionTests(APITestCase):
         self.admin = self.create_professional(
             "reports.admin@example.com",
             AgentProfile.Role.ADMIN,
-            "RPT-ADM-001",
+            "87-00-00-00001",
         )
         self.entry = self.create_professional(
             "reports.entry@example.com",
             AgentProfile.Role.AGENT_SAISIE,
-            "RPT-SAI-001",
+            "87-00-00-00002",
         )
         self.field = self.create_professional(
             "reports.field@example.com",
             AgentProfile.Role.AGENT_TERRAIN,
-            "RPT-TER-001",
+            "87-00-00-00003",
         )
         self.personal = self.create_personal()
 

@@ -28,7 +28,7 @@ class AlertTestMixin:
     def professional(self, email, role, badge):
         User = get_user_model()
         person = Person.objects.create(
-            nif=badge,
+            nif="96" + "".join(ch for ch in badge if ch.isdigit())[-8:],
             first_name=role,
             last_name="Alerts",
         )
@@ -49,7 +49,7 @@ class AlertTestMixin:
     def personal(self):
         User = get_user_model()
         person = Person.objects.create(
-            nif="ALT-PERSONAL-001",
+            nif="9800000004",
             first_name="Personal",
             last_name="Alerts",
         )
@@ -66,17 +66,17 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
         self.entry = self.professional(
             "alerts.entry@example.com",
             AgentProfile.Role.AGENT_SAISIE,
-            "ALT-SAI-001",
+            "98-00-00-00001",
         )
         self.field = self.professional(
             "alerts.field@example.com",
             AgentProfile.Role.AGENT_TERRAIN,
-            "ALT-TER-001",
+            "98-00-00-00002",
         )
         self.admin = self.professional(
             "alerts.admin@example.com",
             AgentProfile.Role.ADMIN,
-            "ALT-ADM-001",
+            "98-00-00-00003",
         )
         self.personal_user = self.personal()
 
@@ -273,7 +273,7 @@ class FieldAlertExpiryTests(AlertTestMixin, TestCase):
         self.field = self.professional(
             "field.expiry@example.com",
             AgentProfile.Role.AGENT_TERRAIN,
-            "ALT-EXP-001",
+            "98-00-00-00005",
         )
 
     def test_expired_field_alert_moves_to_expired(self):
@@ -307,7 +307,7 @@ class ExpiryWarningServiceTests(TestCase):
 
         self.creator = create_agent_saisie_user(
             email="expiry.creator@example.com",
-            badge_number="ALT-CRT-001",
+            badge_number="98-00-00-00006",
         )
         owner_person = Person.objects.create(
             nif="0012345678",
@@ -415,6 +415,6 @@ class ExpiryWarningServiceTests(TestCase):
     def test_owner_nif_uses_owner_person_nif(self):
         from apps.alerts.services import _owner_nif
 
-        self.assertEqual(_owner_nif(self.vehicle), "0012345678")
+        self.assertEqual(_owner_nif(self.vehicle), "001-234-567-8")
 
 

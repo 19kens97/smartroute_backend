@@ -152,7 +152,7 @@ class GeminiScanAPITests(APITestCase):
         from apps.scans.models import GeminiScan
         from apps.vehicles.models import Vehicle
 
-        owner_person = create_person(nif="NIF-001", first_name="Marie", last_name="Jean")
+        owner_person = create_person(nif="0000000019", first_name="Marie", last_name="Jean")
         owner = Owner.objects.create(person=owner_person, phone="37000000", address="Delmas", created_by=self.user)
         vehicle = Vehicle.objects.create(plate_number="DD44444", owner=owner, brand="Nissan", model="Patrol", color="Noir", year=2020)
         InsurancePolicy.objects.create(
@@ -174,8 +174,8 @@ class GeminiScanAPITests(APITestCase):
         data = resp.json()
         self.assertEqual(data["model_used"], "gemini-2.5-flash")
         self.assertEqual(data["documents"]["proprietaire"]["nom"], "Marie Jean")
-        self.assertEqual(data["documents"]["proprietaire"]["nif"], "NIF001")
-        self.assertEqual(data["vehicle"]["owner"]["nif"], "NIF001")
+        self.assertEqual(data["documents"]["proprietaire"]["nif"], "000-000-001-9")
+        self.assertEqual(data["vehicle"]["owner"]["nif"], "000-000-001-9")
         self.assertEqual(data["documents"]["assurance"]["numero_police"], "POL-444")
         scan = GeminiScan.objects.get()
         self.assertEqual(scan.agent, self.user)

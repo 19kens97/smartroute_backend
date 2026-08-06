@@ -1,63 +1,45 @@
-# SmartRoute - Regles metier des sources de verite
+# SmartRoute - Regles Metier Des Sources De Verite
 
-## 1. Person
+## Person
 
-`Person` est la source officielle de l'identite civile dans SmartRoute :
+`Person` est l'identite civile centrale. Le NIF valide contient exactement 10 chiffres en entree ou une valeur normalisable vers `XXX-XXX-XXX-X`. Le NIF peut etre nul selon le contexte, mais une valeur fournie doit respecter la normalisation.
 
-- NIF ;
-- prenom ;
-- nom ;
-- date de naissance.
+## AgentProfile
 
-Les comptes, conducteurs et proprietaires doivent referencer `Person` au lieu de dupliquer ces informations civiles en base.
+Le badge agent contient exactement 11 chiffres en entree ou une valeur normalisable vers `XX-XX-XX-XXXXX`. Les roles reels sont `ADMIN`, `AGENT_SAISIE`, `AGENT_TERRAIN`.
 
-## 2. Driver
+## Driver
 
-`Driver` represente le dossier conducteur/permis simplifie lie a `Person`.
+Le numero de dossier permis respecte le format `XX-YYYYY-XX`. Les dates d'expiration ne doivent pas preceder les dates d'emission. La recherche peut se faire par dossier ou par NIF de la personne.
 
-Il porte les informations propres au permis ou au dossier conducteur : numero de dossier, adresse permis, sexe, groupe sanguin, type de permis, lieu/date de delivrance et date d'expiration.
+## Owner Et VehicleOwnership
 
-`Driver` ne doit pas dupliquer l'identite civile en base. Les donnees civiles exposees par l'API doivent venir de `Driver.person`.
+`Owner` represente le proprietaire administratif. `VehicleOwnership` conserve l'historique de possession et synchronise le proprietaire courant du vehicule quand une possession devient courante.
 
-## 3. Owner
+## Vehicle
 
-`Owner` represente le profil proprietaire lie a `Person`.
+La plaque et le numero moteur sont normalises a l'enregistrement. `Vehicle.owner` represente le proprietaire courant pour les lectures rapides; l'historique reste dans `VehicleOwnership`.
 
-Il porte les informations propres au profil proprietaire, comme le telephone, l'adresse de contact, l'etat actif et l'agent createur.
+## Documents Et Assurance
 
-`Owner` ne doit pas dupliquer l'identite civile en base. Les donnees civiles exposees par l'API doivent venir de `Owner.person`.
+Les documents vehicule et polices d'assurance conservent les metadonnees en base. Les fichiers sont stockes via le systeme de medias, avec validation MIME/extension/taille.
 
-## 4. VehicleOwnership
+## Infractions
 
-`VehicleOwnership` est la source officielle de l'historique de propriete vehicule.
+Le catalogue officiel est fourni par le backend. Les codes metier stables (`I001`, etc.) sont utilises dans les payloads. Les IDs SQL restent internes.
 
-Un seul `VehicleOwnership` courant par vehicule est autorise, via `is_current=True`. Les anciennes proprietes doivent etre conservees avec `is_current=False` et une `end_date` coherente.
+## Tickets Et Snapshots
 
-Toute creation ou mutation du proprietaire courant doit passer par le service metier centralise d'ownership.
+Un PV conserve des snapshots: dossier conducteur, nom conducteur, NIF, plaque, infractions et montants. Ces snapshots preservent l'etat au moment de la verbalisation.
 
-## 5. Vehicle.owner
+## Alertes
 
-`Vehicle.owner` est conserve comme cache courant synchronise.
+Les alertes peuvent etre terrain ou administratives selon role. Les alertes automatiques doivent rester non modifiables manuellement selon les tests existants.
 
-Il existe pour la compatibilite mobile, les payloads historiques, la performance, Gemini/Scan, les alertes et les serializers vehicles.
+## Delits
 
-`Vehicle.owner` ne doit jamais etre modifie directement sans creer ou terminer le `VehicleOwnership` officiel correspondant.
+Les dossiers delits peuvent provenir d'une observation, d'un ticket, d'une verbalisation, d'une alerte, d'un scan, d'une recherche conducteur ou d'un controle vehicule. L'envoi DCPJ present est un flux demo.
 
-## 6. Snapshots PV
+## Regle Stricte
 
-Les snapshots des PV sont des duplications legales volontaires.
-
-Ils figent l'etat au moment de la verbalisation : identite conducteur, numero de dossier, NIF, plaque, libelles et montants d'infractions.
-
-Ils ne doivent pas etre recalcules apres coup depuis les sources courantes.
-
-## 7. Regle stricte
-
-Toute mutation de proprietaire vehicule doit passer par le service centralise d'ownership.
-
-La regle attendue est :
-
-1. terminer l'ancien `VehicleOwnership` courant s'il existe ;
-2. creer le nouveau `VehicleOwnership(is_current=True)` ;
-3. synchroniser `Vehicle.owner` avec ce proprietaire courant ;
-4. conserver les payloads mobiles existants.
+Une fixture ou donnee valide ne doit pas utiliser d'ancien identifiant lisible dans un champ strict (`nif`, `badge_number`, `dossier_number`). Les tests negatifs peuvent conserver des valeurs invalides quand ils verifient un rejet.

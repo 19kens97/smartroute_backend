@@ -13,7 +13,7 @@ class AuditLogTests(TestCase):
     def setUp(self):
         User = get_user_model()
         person = Person.objects.create(
-            nif="NIF-AUDIT-001",
+            nif="8600000001",
             first_name="Audit",
             last_name="Agent",
         )
@@ -26,7 +26,7 @@ class AuditLogTests(TestCase):
         AgentProfile.objects.create(
             user=self.user,
             role=AgentProfile.Role.ADMIN,
-            badge_number="AUD-001",
+            badge_number="86-00-00-00001",
             is_active=True,
         )
         self.factory = RequestFactory()

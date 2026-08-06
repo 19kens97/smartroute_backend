@@ -16,7 +16,7 @@ class OwnersApiTests(APITestCase):
     def create_professional(self, email, role, badge):
         User = get_user_model()
         person = Person.objects.create(
-            nif={"OWN-SAI-001": "910-000-001-0", "OWN-TER-001": "910-000-002-0"}[badge],
+            nif={"91-00-00-00001": "910-000-001-0", "91-00-00-00002": "910-000-002-0"}[badge],
             first_name=role,
             last_name="OwnerTest",
         )
@@ -38,12 +38,12 @@ class OwnersApiTests(APITestCase):
         self.entry = self.create_professional(
             "entry.owner@example.com",
             AgentProfile.Role.AGENT_SAISIE,
-            "OWN-SAI-001",
+            "91-00-00-00001",
         )
         self.field = self.create_professional(
             "field.owner@example.com",
             AgentProfile.Role.AGENT_TERRAIN,
-            "OWN-TER-001",
+            "91-00-00-00002",
         )
 
     def test_entry_agent_can_create_owner_with_new_person(self):
@@ -138,7 +138,7 @@ class VehicleOwnershipConsistencyTests(APITestCase):
         AgentProfile.objects.create(
             user=self.entry,
             role=AgentProfile.Role.AGENT_SAISIE,
-            badge_number="OWN-CONS-001",
+            badge_number="91-00-00-00006",
             is_active=True,
         )
         self.owner_a = self._owner("910-000-007-0", "Owner", "A")

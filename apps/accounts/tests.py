@@ -154,6 +154,7 @@ class ProfileContactAndPasswordTests(APITestCase):
             badge_number="AGT-100",
         )
         self.other = create_agent_terrain_user(email="used@example.com", password="pass", badge_number="AGT-101")
+        self.original_badge_number = self.user.agent_profile.badge_number
         self.client = APIClient()
 
     def authenticate(self):
@@ -196,7 +197,7 @@ class ProfileContactAndPasswordTests(APITestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "agent2@example.com")
         self.assertEqual(self.user.agent_profile.role, "AGENT_TERRAIN")
-        self.assertEqual(self.user.agent_profile.badge_number, "AGT-100")
+        self.assertEqual(self.user.agent_profile.badge_number, self.original_badge_number)
 
     def test_change_password_requires_auth_and_rejects_bad_old_password(self):
         anonymous = self.client.post("/api/auth/change-password/", {}, format="json")

@@ -139,10 +139,10 @@ class Command(BaseCommand):
     def reset_demo_data(self):
         demo_users = get_user_model().objects.filter(email__endswith=f"@{DEMO_DOMAIN}") | get_user_model().objects.filter(person__nif__startswith=DEMO_NIF_PREFIX)
         demo_persons = Person.objects.filter(nif__startswith=DEMO_NIF_PREFIX)
-        demo_vehicles = Vehicle.objects.filter(plate_number__startswith="SR")
+        demo_vehicles = Vehicle.objects.filter(plate_number__startswith="SR") | Vehicle.objects.filter(plate_number__in=["BB07725", "TT00030"])
         demo_tickets = Ticket.objects.filter(client_uuid__in=[demo_uuid(f"ticket-{i:02d}") for i in range(1, 21)])
         demo_alerts = Alert.objects.filter(deduplication_key__startswith="DEMO-DATASET:")
-        demo_scans = Scan.objects.filter(plate_number__startswith="SR") | Scan.objects.filter(plate_number__startswith="UNKNOWN")
+        demo_scans = Scan.objects.filter(plate_number__startswith="SR") | Scan.objects.filter(plate_number__startswith="UNKNOWN") | Scan.objects.filter(plate_number__in=["BB07725", "TT00030"])
         demo_gemini = GeminiScan.objects.filter(raw_response__startswith="DEMO-DATASET:")
         if self.table_exists(DelitCase):
             demo_delits = DelitCase.objects.filter(deduplication_key__startswith="DEMO-DATASET:")
@@ -303,6 +303,7 @@ class Command(BaseCommand):
             ("SR10013", "Yamaha", "Moto Police", owners["owner10"], True, today + timedelta(days=30)),
             ("SR10014", "Mercedes", "Sprinter", owners["owner4"], False, today + timedelta(days=250)),
             ("SR10015", "Mazda", "BT-50", owners["owner5"], False, today - timedelta(days=1)),
+            ("BB-07725", "Toyota", "RAV4", owners["owner11"], False, today + timedelta(days=210)),
         ]
         vehicles = {}
         for index, (plate, brand, model, owner, wanted, reg_until) in enumerate(specs, start=1):

@@ -23,10 +23,10 @@ class InsurancePolicyModelAndSerializerTests(TestCase):
     def setUp(self):
         self.creator = create_agent_saisie_user(
             email="insurance.model.creator@example.com",
-            badge_number="INS-MOD-001",
+            badge_number="94-00-00-00001",
         )
         owner_person = Person.objects.create(
-            nif="INS-OWNER-1",
+            nif="9400000001",
             first_name="Marie",
             last_name="Joseph",
         )
@@ -136,22 +136,22 @@ class InsurancePolicyApiTests(APITestCase):
         self.entry = self._create_professional_user(
             email="insurance.entry@example.com",
             role=AgentProfile.Role.AGENT_SAISIE,
-            badge_number="INS-SAI-001",
+            badge_number="94-00-00-00002",
         )
         self.admin = self._create_professional_user(
             email="insurance.admin@example.com",
             role=AgentProfile.Role.ADMIN,
-            badge_number="INS-ADM-001",
+            badge_number="94-00-00-00003",
         )
         self.field = self._create_professional_user(
             email="insurance.field@example.com",
             role=AgentProfile.Role.AGENT_TERRAIN,
-            badge_number="INS-TER-001",
+            badge_number="94-00-00-00004",
         )
         self.personal = self._create_personal_user()
 
         owner_person = Person.objects.create(
-            nif="INS-OWNER-2",
+            nif="9400000002",
             first_name="Jean",
             last_name="Pierre",
         )
@@ -199,7 +199,7 @@ class InsurancePolicyApiTests(APITestCase):
         User = get_user_model()
 
         person = Person.objects.create(
-            nif=badge_number,
+            nif="95" + "".join(ch for ch in badge_number if ch.isdigit())[-8:],
             first_name=role,
             last_name="Insurance",
         )
@@ -224,7 +224,7 @@ class InsurancePolicyApiTests(APITestCase):
         User = get_user_model()
 
         person = Person.objects.create(
-            nif="INS-PERSONAL-001",
+            nif="9400000005",
             first_name="Personal",
             last_name="Insurance",
         )

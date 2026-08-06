@@ -14,7 +14,7 @@ class SyncApiTests(APITestCase):
     def professional(self, email, role, badge):
         User = get_user_model()
         person = Person.objects.create(
-            nif=f"NIF-{badge}",
+            nif="88" + "".join(ch for ch in badge if ch.isdigit())[-8:].zfill(8),
             first_name=role,
             last_name="Sync",
         )
@@ -35,7 +35,7 @@ class SyncApiTests(APITestCase):
     def personal(self):
         User = get_user_model()
         person = Person.objects.create(
-            nif="NIF-SYNC-PERSONAL",
+            nif="8800000003",
             first_name="Personal",
             last_name="Sync",
         )
@@ -50,12 +50,12 @@ class SyncApiTests(APITestCase):
         self.user = self.professional(
             "sync.field@example.com",
             AgentProfile.Role.AGENT_TERRAIN,
-            "SYN-TER-001",
+            "88-00-00-00001",
         )
         self.other_user = self.professional(
             "sync.other@example.com",
             AgentProfile.Role.AGENT_SAISIE,
-            "SYN-SAI-001",
+            "88-00-00-00004",
         )
         self.personal_user = self.personal()
         self.device_uuid = uuid.uuid4()

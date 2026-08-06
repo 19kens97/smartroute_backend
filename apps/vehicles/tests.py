@@ -19,7 +19,7 @@ def create_owner(*, nif, first_name, last_name, created_by=None):
     )
     if created_by is None:
         creator_person = Person.objects.create(
-            nif=f"CREATOR-{nif}",
+            nif="93" + nif[-8:],
             first_name="Agent",
             last_name="Createur",
         )
@@ -40,7 +40,7 @@ from .serializers import (
 class VehicleModelAndSerializerTests(TestCase):
     def setUp(self):
         self.owner = create_owner(
-            nif="OWNER-001",
+            nif="9200000001",
             first_name="Marie",
             last_name="Jean",
         )
@@ -147,22 +147,22 @@ class VehicleApiTests(APITestCase):
         self.entry = self._create_professional_user(
             email="vehicle.entry@example.com",
             role=AgentProfile.Role.AGENT_SAISIE,
-            badge_number="VEH-SAI-001",
+            badge_number="92-00-00-00001",
         )
         self.admin = self._create_professional_user(
             email="vehicle.admin@example.com",
             role=AgentProfile.Role.ADMIN,
-            badge_number="VEH-ADM-001",
+            badge_number="92-00-00-00002",
         )
         self.field = self._create_professional_user(
             email="vehicle.field@example.com",
             role=AgentProfile.Role.AGENT_TERRAIN,
-            badge_number="VEH-TER-001",
+            badge_number="92-00-00-00003",
         )
         self.personal = self._create_personal_user()
 
         self.owner = create_owner(
-            nif="OWNER-API-001",
+            nif="9200000002",
             first_name="Paul",
             last_name="Pierre",
             created_by=self.entry,
@@ -187,7 +187,7 @@ class VehicleApiTests(APITestCase):
         User = get_user_model()
 
         person = Person.objects.create(
-            nif=badge_number,
+            nif="94" + "".join(ch for ch in badge_number if ch.isdigit())[-8:],
             first_name=role,
             last_name="Vehicle",
         )
@@ -212,7 +212,7 @@ class VehicleApiTests(APITestCase):
         User = get_user_model()
 
         person = Person.objects.create(
-            nif="VEH-PERSONAL-001",
+            nif="9200000004",
             first_name="Personal",
             last_name="Vehicle",
         )
@@ -378,7 +378,7 @@ class VehicleApiTests(APITestCase):
 
     def test_patch_owner_routes_through_ownership_service(self):
         new_owner = create_owner(
-            nif="OWNER-API-002",
+            nif="9200000003",
             first_name="Nouvel",
             last_name="Owner",
             created_by=self.entry,

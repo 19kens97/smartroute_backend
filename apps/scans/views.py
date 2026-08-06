@@ -1,7 +1,7 @@
 import mimetypes
 
 from django.http import FileResponse, Http404
-from rest_framework.permissions import IsAuthenticated
+from apps.accounts.permissions import IsAgentTerrain
 from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
@@ -14,11 +14,11 @@ from .serializers import ScanSerializer
 class ScanViewSet(ReadOnlyModelViewSet):
     queryset = Scan.objects.select_related("agent").all().order_by("-id")
     serializer_class = ScanSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAgentTerrain]
 
 
 class ScanHistoryView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAgentTerrain]
 
     def get(self, request):
         manual_scans = [
@@ -56,7 +56,7 @@ class ScanHistoryView(APIView):
 
 
 class ScanHistoryImageView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAgentTerrain]
 
     def get(self, request, pk):
         scan = GeminiScan.objects.filter(pk=pk, agent=request.user).only("image").first()
@@ -69,7 +69,7 @@ class ScanHistoryImageView(APIView):
 
 
 class RecognizeView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAgentTerrain]
 
     def post(self, request):
         from django.conf import settings

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from itertools import count
 
 from django.contrib.auth import get_user_model
 
@@ -8,6 +9,8 @@ from apps.accounts.models import AgentProfile, Person, User
 
 
 DEFAULT_PASSWORD = "Pass1234!Secure"
+_nif_counter = count(1)
+_badge_counter = count(1)
 
 
 def _unique(value: str | None, prefix: str) -> str:
@@ -16,14 +19,34 @@ def _unique(value: str | None, prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:10]}".upper()
 
 
+def make_test_nif() -> str:
+    return f"{next(_nif_counter):010d}"
+
+
+def make_test_badge_number() -> str:
+    return f"10-00-00-{next(_badge_counter):05d}"
+
+
+def _valid_nif(value: str | None) -> str:
+    if value and Person.normalize_nif(value):
+        return value
+    return make_test_nif()
+
+
+def _valid_badge_number(value: str | None) -> str:
+    if value and AgentProfile.normalize_badge_number(value):
+        return value
+    return make_test_badge_number()
+
+
 def create_person(*, nif: str | None = None, first_name: str = "Test", last_name: str = "User", birth_date=None) -> Person:
-    return Person.objects.create(nif=_unique(nif, "NIF"), first_name=first_name, last_name=last_name, birth_date=birth_date)
+    return Person.objects.create(nif=_valid_nif(nif), first_name=first_name, last_name=last_name, birth_date=birth_date)
 
 
 def create_agent_user(*, email: str | None = None, password: str = DEFAULT_PASSWORD, role: str = AgentProfile.Role.AGENT_TERRAIN, badge_number: str | None = None, first_name: str | None = None, last_name: str = "Agent", nif: str | None = None, post: str = "", precinct: str = "", is_staff: bool = False, is_superuser: bool = False, is_active: bool = True) -> User:
     UserModel = get_user_model()
-    badge_number = _unique(badge_number, "BADGE")
-    person = create_person(nif=nif or badge_number, first_name=first_name or str(role), last_name=last_name)
+    badge_number = _valid_badge_number(badge_number)
+    person = create_person(nif=nif, first_name=first_name or str(role), last_name=last_name)
     user = UserModel.objects.create_user(person=person, account_type=UserModel.AccountType.PROFESSIONAL, email=email or f"{badge_number.lower()}@example.com", password=password, is_staff=is_staff, is_superuser=is_superuser, is_active=is_active)
     AgentProfile.objects.create(user=user, role=role, badge_number=badge_number, post=post, precinct=precinct, is_active=is_active)
     return user

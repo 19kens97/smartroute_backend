@@ -20,17 +20,17 @@ class DriverApiTests(APITestCase):
         self.admin = self._create_professional_user(
             email="admin.driver@example.com",
             role=AgentProfile.Role.ADMIN,
-            badge_number="ADM-DRIVER-001",
+            badge_number="90-00-00-00001",
         )
         self.terrain = self._create_professional_user(
             email="terrain.driver@example.com",
             role=AgentProfile.Role.AGENT_TERRAIN,
-            badge_number="TER-DRIVER-001",
+            badge_number="90-00-00-00002",
         )
         self.saisie = self._create_professional_user(
             email="saisie.driver@example.com",
             role=AgentProfile.Role.AGENT_SAISIE,
-            badge_number="SAI-DRIVER-001",
+            badge_number="90-00-00-00003",
         )
         self.personal = self._create_personal_user()
 
@@ -63,7 +63,7 @@ class DriverApiTests(APITestCase):
     ):
         User = get_user_model()
         person = Person.objects.create(
-            nif={"ADM-DRIVER-001": "900-000-001-0", "TER-DRIVER-001": "900-000-002-0", "SAI-DRIVER-001": "900-000-003-0"}[badge_number],
+            nif={"90-00-00-00001": "900-000-001-0", "90-00-00-00002": "900-000-002-0", "90-00-00-00003": "900-000-003-0"}[badge_number],
             first_name=role,
             last_name="Test",
         )

@@ -12,6 +12,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.core.api import error_response, success_response
@@ -20,6 +21,7 @@ from .models import AgentProfile, User
 from .permissions import IsAdminOrAgentSaisie
 from .serializers import (
     ChangePasswordSerializer,
+    MobileLoginSerializer,
     PersonalLoginSerializer,
     ProfessionalLoginSerializer,
     SecureTokenRefreshSerializer,
@@ -46,6 +48,8 @@ def build_auth_payload(user):
 
     refresh = RefreshToken.for_user(user)
     refresh["account_type"] = user.account_type
+    if user.account_type == User.AccountType.PROFESSIONAL:
+        refresh["role"] = user.agent_profile.role
 
     return {
         "access_token": str(refresh.access_token),
@@ -79,6 +83,113 @@ class ProfessionalLoginAPIView(BaseLoginAPIView):
 @extend_schema(tags=["Authentication"], request=PersonalLoginSerializer)
 class PersonalLoginAPIView(BaseLoginAPIView):
     serializer_class = PersonalLoginSerializer
+
+
+MOBILE_AUTH_REQUIRED_MESSAGE = "Seuls les agents de terrain actifs peuvent acceder a l'application mobile SmartRoute."
+MOBILE_INACTIVE_MESSAGE = "Ce compte est inactif ou suspendu. Contactez un administrateur."
+INVALID_CREDENTIALS_MESSAGE = "Identifiants incorrects."
+
+
+def mobile_access_error(user):
+    if not user.is_active:
+        return MOBILE_INACTIVE_MESSAGE
+    if user.account_type != User.AccountType.PROFESSIONAL:
+        return MOBILE_AUTH_REQUIRED_MESSAGE
+    try:
+        profile = user.agent_profile
+    except AgentProfile.DoesNotExist:
+        return MOBILE_AUTH_REQUIRED_MESSAGE
+    if not profile.is_active:
+        return MOBILE_INACTIVE_MESSAGE
+    if profile.role != AgentProfile.Role.AGENT_TERRAIN:
+        return MOBILE_AUTH_REQUIRED_MESSAGE
+    return None
+
+
+@extend_schema(tags=["Authentication"], request=MobileLoginSerializer)
+class MobileLoginAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = MobileLoginSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                message=INVALID_CREDENTIALS_MESSAGE,
+                status_code=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        email = serializer.validated_data["email"]
+        password = serializer.validated_data["password"]
+        try:
+            user = User.objects.select_related("agent_profile", "person").get(
+                email__iexact=email,
+                account_type=User.AccountType.PROFESSIONAL,
+            )
+        except User.DoesNotExist:
+            return error_response(
+                message=INVALID_CREDENTIALS_MESSAGE,
+                status_code=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        if not user.check_password(password):
+            return error_response(
+                message=INVALID_CREDENTIALS_MESSAGE,
+                status_code=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        access_error = mobile_access_error(user)
+        if access_error:
+            return error_response(
+                message=access_error,
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        return success_response(
+            message="Connexion mobile reussie",
+            data=build_auth_payload(user),
+        )
+
+
+class MobileTokenRefreshView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        request=SecureTokenRefreshSerializer,
+        responses={200: dict},
+        tags=["Authentication"],
+    )
+    def post(self, request):
+        raw_refresh = request.data.get("refresh")
+        try:
+            refresh = RefreshToken(raw_refresh)
+            user_id = refresh.get("user_id")
+            user = User.objects.select_related("agent_profile").get(pk=user_id)
+        except (TokenError, TypeError, User.DoesNotExist):
+            raise AuthenticationFailed("Refresh token invalide.")
+
+        access_error = mobile_access_error(user)
+        if access_error:
+            return error_response(
+                message=access_error,
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = SecureTokenRefreshSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        response_data = {
+            "access_token": data["access"],
+            "account_type": data["account_type"],
+            "role": user.agent_profile.role,
+        }
+        if "refresh" in data:
+            response_data["refresh_token"] = data["refresh"]
+
+        return success_response(
+            message="Tokens mobiles renouveles avec succes",
+            data=response_data,
+        )
 
 
 class CustomTokenView(APIView):

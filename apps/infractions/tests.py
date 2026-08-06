@@ -187,17 +187,17 @@ class InfractionCatalogApiTests(APITestCase):
         self.field = self._professional(
             "infractions.field@example.com",
             AgentProfile.Role.AGENT_TERRAIN,
-            "INF-TER-001",
+            "96-00-00-00001",
         )
         self.entry = self._professional(
             "infractions.entry@example.com",
             AgentProfile.Role.AGENT_SAISIE,
-            "INF-SAI-001",
+            "96-00-00-00002",
         )
         self.admin = self._professional(
             "infractions.admin@example.com",
             AgentProfile.Role.ADMIN,
-            "INF-ADM-001",
+            "96-00-00-00003",
         )
         self.personal = self._personal()
 
@@ -212,7 +212,7 @@ class InfractionCatalogApiTests(APITestCase):
         User = get_user_model()
 
         person = Person.objects.create(
-            nif=badge,
+            nif="96" + "".join(ch for ch in badge if ch.isdigit())[-8:],
             first_name=role,
             last_name="Infractions",
         )
@@ -239,7 +239,7 @@ class InfractionCatalogApiTests(APITestCase):
         User = get_user_model()
 
         person = Person.objects.create(
-            nif="INF-PERSONAL-001",
+            nif="9600000004",
             first_name="Personal",
             last_name="Infractions",
         )

@@ -1,4 +1,4 @@
-﻿# SmartRoute Backend
+# SmartRoute Backend
 
 Backend Django REST Framework de SmartRoute. Il expose les APIs utilisees par l'application mobile: authentification JWT, profils agents, vehicules, documents, permis, assurances, scans Gemini, PV, alertes, statistiques, rapports et synchronisation.
 
@@ -227,3 +227,59 @@ Les endpoints multipart existants restent les points d'entree :
 - `POST /api/scans/scan-plate/` valide l'image en entree mais ne la persiste pas.
 
 Les logs media utilisent notamment `media_upload_started`, `media_validation_failed`, `media_saved`, `media_downloaded`, `media_access_denied` et `media_deleted`, sans journaliser de contenu binaire ni de donnees sensibles.
+
+
+## Documentation Technique Complementaire
+
+- `docs/websocket-alerts.md`
+- `docs/offline-sync.md`
+- `docs/roles-permissions.md`
+- `docs/reports.md`
+- `docs/private-media.md`
+
+## Tests Complementaires
+
+Commandes generales :
+
+```bash
+python manage.py check
+python manage.py test
+```
+
+Commandes ciblees utiles pour les zones sensibles :
+
+```bash
+python manage.py test apps.alerts.tests_filters_websocket
+python manage.py test apps.sync.tests_handlers
+python manage.py test apps.reports.tests_services_additional
+python manage.py test apps.accounts.tests_permissions_services
+python manage.py test apps.tickets.tests_services_additional
+python manage.py test apps.drivers.tests_services
+```
+
+Les tests Gemini mockent uniquement l'appel externe. Les tests Redis/cache et Channels utilisent des backends locaux (`LocMemCache` et channel layer memoire), pas un Redis externe. Si `coverage` est disponible dans l'environnement local, utilisez `coverage run manage.py test` puis `coverage report`.
+
+### Authentification mobile et backoffice
+
+L'application mobile utilise exclusivement les endpoints dedies suivants:
+
+- `POST /api/auth/mobile/login/`: accepte `email` ou `username` + `password`, et n'emet des tokens JWT que pour un compte `PROFESSIONAL` actif ayant un `AgentProfile` actif avec le role `AGENT_TERRAIN`.
+- `POST /api/auth/mobile/token/refresh/`: renouvelle le token mobile uniquement si le compte et le profil sont encore actifs et si le role courant reste `AGENT_TERRAIN`.
+
+Les comptes `AGENT_SAISIE`, `ADMIN`, `PERSONAL` et les comptes professionnels sans profil agent actif sont refuses sur mobile. Ils doivent etre orientes vers la future plateforme web/backoffice, afin de ne pas leur exposer les fonctions de scan terrain.
+
+Les endpoints historiques `POST /api/auth/auth/professional/login/`, `POST /api/auth/auth/personal/login/` et `POST /api/auth/auth/token/refresh/` sont conserves pour compatibilite et pour les usages web/backoffice. Les endpoints sensibles de scan sous `/api/scans/` exigent aussi la permission `IsAgentTerrain` cote backend.
+
+## Documentation complete
+
+- [Index backend](docs/README.md)
+- [Architecture](docs/architecture.md)
+- [Installation developpement](docs/installation-development.md)
+- [Deploiement production](docs/deployment-production.md)
+- [Authentification](docs/authentication.md)
+- [Vue d'ensemble API](docs/api-overview.md)
+- [Roles et permissions](docs/roles-permissions.md)
+- [Regles metier](docs/business-data-rules.md)
+- [Guide de tests](docs/testing-guide.md)
+- [Depannage](docs/troubleshooting.md)
+- [Limites connues](docs/known-limitations.md)

@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 from django.conf import settings
 from django.http import JsonResponse
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema, inline_serializer
 from django.utils import timezone
 from google import genai
 from google.api_core import exceptions
@@ -14,6 +15,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework import serializers
 
 from apps.accounts.permissions import IsAgentTerrain
+from apps.core.openapi import GeminiErrorResponseSerializer, GeminiScanResponseSerializer
 
 from apps.insurance.models import InsurancePolicy
 from apps.media_storage.services import MEDIA_TYPE_IMAGE, get_image_limits, validate_uploaded_media
@@ -249,6 +251,7 @@ def mark_scan_error(scan_entry, error_code: str):
     scan_entry.save(update_fields=["raw_response", "plate_detected", "updated_at"])
 
 
+@extend_schema(request=inline_serializer(name="GeminiPlateImageUpload", fields={"image": serializers.ImageField()}), responses={200: GeminiScanResponseSerializer, 400: GeminiErrorResponseSerializer, 422: GeminiErrorResponseSerializer, 429: GeminiErrorResponseSerializer, 500: GeminiErrorResponseSerializer, 502: GeminiErrorResponseSerializer, 503: GeminiErrorResponseSerializer}, tags=["scans"])
 @api_view(["POST"])
 @permission_classes([IsAgentTerrain])
 def extract_license_plate(request):
@@ -318,6 +321,7 @@ def extract_license_plate(request):
         return JsonResponse({"status": "error", "message": "Erreur interne pendant l'analyse de l'image."}, status=500)
 
 
+@extend_schema(responses={200: GeminiScanResponseSerializer, 404: GeminiErrorResponseSerializer}, tags=["scans"])
 @api_view(["GET"])
 @permission_classes([IsAgentTerrain])
 def get_last_scan(request):
@@ -327,6 +331,7 @@ def get_last_scan(request):
     return JsonResponse(build_scan_response(last_scan, last_scan.vehicle))
 
 
+@extend_schema(parameters=[OpenApiParameter("plate_number", OpenApiTypes.STR, OpenApiParameter.QUERY, required=True)], responses={200: GeminiScanResponseSerializer, 400: GeminiErrorResponseSerializer}, tags=["scans"])
 @api_view(["GET"])
 @permission_classes([IsAgentTerrain])
 def search_plate(request):

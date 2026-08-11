@@ -1,4 +1,5 @@
 from django.db.models import Q
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from .models import InsurancePolicy
@@ -39,6 +40,7 @@ class InsurancePolicyReadSerializer(
         )
         read_only_fields = fields
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_owner_name(self, obj):
         vehicle = getattr(obj, "vehicle", None)
         owner = getattr(vehicle, "owner", None) if vehicle else None

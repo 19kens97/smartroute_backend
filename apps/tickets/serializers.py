@@ -1,4 +1,5 @@
 from django.db import IntegrityError, transaction
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.accounts.models import AgentProfile
@@ -58,6 +59,7 @@ class TicketProofSerializer(serializers.ModelSerializer):
         read_only_fields = ("mime_type", "size_bytes", "checksum_sha256", "url", "created_at")
         extra_kwargs = {"file": {"write_only": True}}
 
+    @extend_schema_field(serializers.URLField())
     def get_url(self, obj):
         request = self.context.get("request")
         path = (
@@ -211,9 +213,11 @@ class TicketVerbalizationSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_agent_name(self, obj):
         return _display_name(obj.agent)
 
+    @extend_schema_field(serializers.CharField())
     def get_agent_role(self, obj):
         profile = _profile(obj.agent)
         return getattr(profile, "role", "") if profile else ""
@@ -241,6 +245,7 @@ class TicketListSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_opened_by_name(self, obj):
         return _display_name(obj.opened_by)
 
@@ -317,14 +322,17 @@ class TicketSerializer(serializers.ModelSerializer):
             "updated_at",
         )
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_opened_by_name(self, obj):
         return _display_name(obj.opened_by)
 
+    @extend_schema_field(serializers.URLField())
     def get_barcode_image_url(self, obj):
         request = self.context.get("request")
         path = f"/api/tickets/{obj.pk}/barcode/"
         return request.build_absolute_uri(path) if request else path
 
+    @extend_schema_field(serializers.URLField(allow_null=True))
     def get_agent_signature_url(self, obj):
         first = obj.verbalizations.order_by("sequence_number").first()
         if first is None:

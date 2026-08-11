@@ -1,4 +1,5 @@
 from django.db import transaction
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.accounts.models import Person
@@ -68,9 +69,11 @@ class DriverLicenseReadSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    @extend_schema_field(serializers.CharField())
     def get_validity_state(self, obj):
         return get_license_validity_state(obj)
 
+    @extend_schema_field(serializers.BooleanField())
     def get_is_currently_valid(self, obj):
         return self.get_validity_state(obj) == "VALID"
 

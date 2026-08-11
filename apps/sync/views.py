@@ -2,11 +2,13 @@ import logging
 
 from django.conf import settings
 from django.utils import timezone
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.api import api_response
+from apps.core.openapi import ApiEnvelopeSerializer, SyncPullEnvelopeSerializer
 
 from .models import SyncDevice, SyncSession
 from .permissions import SyncPermission
@@ -59,6 +61,7 @@ class SyncBaseView(APIView):
 
 
 class SyncDeviceRegisterView(SyncBaseView):
+    @extend_schema(request=SyncDeviceRegisterSerializer, responses={200: ApiEnvelopeSerializer}, tags=["sync"])
     def post(self, request):
         serializer = SyncDeviceRegisterSerializer(
             data=request.data
@@ -86,6 +89,7 @@ class SyncDeviceRegisterView(SyncBaseView):
 
 
 class SyncDeviceRevokeView(SyncBaseView):
+    @extend_schema(request=SyncDeviceRevokeSerializer, responses={200: ApiEnvelopeSerializer}, tags=["sync"])
     def post(self, request):
         serializer = SyncDeviceRevokeSerializer(
             data=request.data
@@ -116,6 +120,7 @@ class SyncDeviceRevokeView(SyncBaseView):
 
 
 class SyncPushView(SyncBaseView):
+    @extend_schema(request=SyncPushRequestSerializer, responses={200: ApiEnvelopeSerializer}, tags=["sync"])
     def post(self, request):
         self.enforce_request_size(request)
 
@@ -155,6 +160,7 @@ class SyncPushView(SyncBaseView):
 
 
 class SyncPullView(SyncBaseView):
+    @extend_schema(request=SyncPullRequestSerializer, responses={200: SyncPullEnvelopeSerializer}, tags=["sync"])
     def post(self, request):
         self.enforce_request_size(request)
 
@@ -200,6 +206,7 @@ class SyncPullView(SyncBaseView):
 
 
 class SyncStatusView(SyncBaseView):
+    @extend_schema(parameters=[OpenApiParameter("request_uuid", OpenApiTypes.UUID, OpenApiParameter.QUERY, required=True)], responses={200: ApiEnvelopeSerializer}, tags=["sync"])
     def get(self, request):
         serializer = SyncStatusQuerySerializer(
             data=request.query_params
@@ -236,6 +243,7 @@ class SyncStatusView(SyncBaseView):
 
 
 class SyncDevicesView(SyncBaseView):
+    @extend_schema(responses={200: ApiEnvelopeSerializer}, tags=["sync"])
     def get(self, request):
         devices = SyncDevice.objects.filter(
             user=request.user

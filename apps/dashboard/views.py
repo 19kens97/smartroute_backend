@@ -1,13 +1,15 @@
-﻿import logging
+import logging
 from datetime import timedelta
 
 from django.db.models import Count
 from django.db.models.functions import TruncDate
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from django.utils import timezone
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from apps.core.api import api_response
+from apps.core.openapi import DashboardSummaryEnvelopeSerializer
 from apps.core.cache import DASHBOARD_CACHE_TTL_SECONDS, dashboard_cache_key, safe_cache_get, safe_cache_set
 from apps.scans.models import GeminiScan, Scan
 from apps.sync.models import SyncSession
@@ -123,6 +125,7 @@ class DashboardSummaryView(APIView):
             "alerts_today": 0,
         }
 
+    @extend_schema(parameters=[OpenApiParameter("days", OpenApiTypes.INT, OpenApiParameter.QUERY, required=False)], responses={200: DashboardSummaryEnvelopeSerializer}, tags=["dashboard"])
     def get(self, request):
         started_at = timezone.now()
         days = self.get_days(request)

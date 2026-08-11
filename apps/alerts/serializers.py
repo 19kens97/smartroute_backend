@@ -1,4 +1,5 @@
 from django.db import transaction
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.accounts.models import AgentProfile
@@ -60,6 +61,7 @@ class AlertEvidenceSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    @extend_schema_field(serializers.URLField())
     def get_url(self, obj):
         request = self.context.get("request")
         path = f"/api/alerts/{obj.alert_id}/evidence/{obj.pk}/"
@@ -96,6 +98,7 @@ class AlertListSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    @extend_schema_field(serializers.BooleanField())
     def get_is_opened(self, obj):
         return bool(getattr(obj, "is_opened_for_user", False))
 
@@ -193,12 +196,15 @@ class AlertSerializer(serializers.ModelSerializer):
             "updated_at",
         )
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_created_by_name(self, obj):
         return display_name(obj.created_by)
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_created_by_role(self, obj):
         return agent_role(obj.created_by)
 
+    @extend_schema_field(serializers.BooleanField())
     def get_is_opened(self, obj):
         return bool(getattr(obj, "is_opened_for_user", False))
 

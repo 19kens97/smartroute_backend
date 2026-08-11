@@ -3,6 +3,7 @@ from io import BytesIO
 from django.db import transaction
 from django.http import FileResponse, Http404, HttpResponse
 from django.utils import timezone
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -170,6 +171,7 @@ class TicketViewSet(ModelViewSet):
         self.check_object_permissions(self.request, verbalization)
         return verbalization
 
+    @extend_schema(parameters=[OpenApiParameter("verbalization_id", OpenApiTypes.INT, OpenApiParameter.PATH)], request=ReasonSerializer, responses={200: TicketVerbalizationSerializer})
     @action(
         detail=True,
         methods=["post"],
@@ -279,6 +281,7 @@ class TicketViewSet(ModelViewSet):
         response["Content-Disposition"] = f'inline; filename="pv-{ticket.ticket_number}-barcode.svg"'
         return response
 
+    @extend_schema(parameters=[OpenApiParameter("verbalization_id", OpenApiTypes.INT, OpenApiParameter.PATH)], request=TicketProofSerializer, responses={201: TicketProofSerializer})
     @action(
         detail=True,
         methods=["post"],
@@ -297,6 +300,7 @@ class TicketViewSet(ModelViewSet):
             TicketProofSerializer(proof, context={"request": request}).data,
         )
 
+    @extend_schema(parameters=[OpenApiParameter("verbalization_id", OpenApiTypes.INT, OpenApiParameter.PATH), OpenApiParameter("proof_id", OpenApiTypes.INT, OpenApiParameter.PATH)], responses={200: OpenApiResponse(response=OpenApiTypes.BINARY, description="Fichier de preuve")})
     @action(
         detail=True,
         methods=["get"],

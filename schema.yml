@@ -1,0 +1,7533 @@
+openapi: 3.0.3
+info:
+  title: SmartRoute API
+  version: 1.0.0
+  description: Backend Django/DRF SmartRoute
+paths:
+  /api/alerts/:
+    get:
+      operationId: alerts_list
+      parameters:
+      - in: query
+        name: alert_type
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - DOCUMENT_EXPIRY_WARNING
+            - FIELD_ESCAPE
+            - JUDICIAL_ALERT
+            - REFUSED_CONTROL
+            - STOLEN_PLATE
+            - SUSPICIOUS_BEHAVIOR
+            - WANTED_VEHICLE
+        description: |-
+          * `FIELD_ESCAPE` - Fuite lors du contrôle
+          * `REFUSED_CONTROL` - Refus de contrôle
+          * `SUSPICIOUS_BEHAVIOR` - Comportement suspect
+          * `WANTED_VEHICLE` - Véhicule volé ou recherché
+          * `STOLEN_PLATE` - Plaque volée
+          * `JUDICIAL_ALERT` - Alerte judiciaire
+          * `DOCUMENT_EXPIRY_WARNING` - Document proche de l'expiration
+        explode: true
+        style: form
+      - in: query
+        name: category
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - ADMINISTRATIVE
+            - AUTOMATIC
+            - FIELD_REPORT
+        description: |-
+          * `AUTOMATIC` - Automatique
+          * `FIELD_REPORT` - Signalement terrain
+          * `ADMINISTRATIVE` - Administrative
+        explode: true
+        style: form
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_by
+        schema:
+          type: integer
+      - in: query
+        name: expires_before
+        schema:
+          type: string
+          format: date-time
+      - name: ordering
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      - in: query
+        name: plate_number
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - in: query
+        name: severity
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - CRITICAL
+            - INFO
+            - WARNING
+        description: |-
+          * `INFO` - Information
+          * `WARNING` - Avertissement
+          * `CRITICAL` - Critique
+        explode: true
+        style: form
+      - in: query
+        name: source
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - MANUAL
+            - SYSTEM
+        description: |-
+          * `MANUAL` - Manuelle
+          * `SYSTEM` - Système
+        explode: true
+        style: form
+      - in: query
+        name: status
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - ACTIVE
+            - CANCELLED
+            - EXPIRED
+            - RESOLVED
+        description: |-
+          * `ACTIVE` - Active
+          * `RESOLVED` - Résolue
+          * `CANCELLED` - Annulée
+          * `EXPIRED` - Expirée
+        explode: true
+        style: form
+      tags:
+      - alerts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlertListList'
+          description: ''
+    post:
+      operationId: alerts_create
+      tags:
+      - alerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Alert'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Alert'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Alert'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+          description: ''
+  /api/alerts/{id}/:
+    get:
+      operationId: alerts_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) alert.
+        required: true
+      tags:
+      - alerts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+          description: ''
+    patch:
+      operationId: alerts_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) alert.
+        required: true
+      tags:
+      - alerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAlert'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAlert'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAlert'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+          description: ''
+  /api/alerts/{id}/cancel/:
+    post:
+      operationId: alerts_cancel_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) alert.
+        required: true
+      tags:
+      - alerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertClose'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AlertClose'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AlertClose'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertClose'
+          description: ''
+  /api/alerts/{id}/evidence/{evidence_pk}/:
+    get:
+      operationId: alerts_evidence_retrieve
+      parameters:
+      - in: path
+        name: evidence_pk
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) alert.
+        required: true
+      tags:
+      - alerts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Fichier de preuve
+  /api/alerts/{id}/mark-opened/:
+    post:
+      operationId: alerts_mark_opened_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) alert.
+        required: true
+      tags:
+      - alerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Alert'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Alert'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Alert'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+          description: ''
+  /api/alerts/{id}/resolve/:
+    post:
+      operationId: alerts_resolve_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) alert.
+        required: true
+      tags:
+      - alerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertClose'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AlertClose'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AlertClose'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertClose'
+          description: ''
+  /api/alerts/recent-unread/:
+    get:
+      operationId: alerts_recent_unread_retrieve
+      tags:
+      - alerts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertList'
+          description: ''
+  /api/auth/auth/personal/login/:
+    post:
+      operationId: auth_auth_personal_login_create
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonalLogin'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PersonalLogin'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PersonalLogin'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthEnvelope'
+          description: ''
+  /api/auth/auth/professional/login/:
+    post:
+      operationId: auth_auth_professional_login_create
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfessionalLogin'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProfessionalLogin'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProfessionalLogin'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthEnvelope'
+          description: ''
+  /api/auth/auth/token/refresh/:
+    post:
+      operationId: auth_auth_token_refresh_create
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecureTokenRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SecureTokenRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SecureTokenRefresh'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/auth/change-password/:
+    post:
+      operationId: auth_change_password_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+          description: ''
+  /api/auth/forgot-password/:
+    post:
+      operationId: auth_forgot_password_create
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPassword'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ForgotPassword'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ForgotPassword'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyEnvelope'
+          description: ''
+  /api/auth/me/:
+    get:
+      operationId: auth_me_retrieve
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRead'
+          description: ''
+    put:
+      operationId: auth_me_update
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRead'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserRead'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserRead'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRead'
+          description: ''
+    patch:
+      operationId: auth_me_partial_update
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileUpdate'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileUpdate'
+          description: ''
+  /api/auth/me/update/:
+    patch:
+      operationId: auth_me_update_partial_update
+      tags:
+      - Users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserProfileUpdate'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRead'
+          description: ''
+  /api/auth/mobile/login/:
+    post:
+      operationId: auth_mobile_login_create
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileLogin'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MobileLogin'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MobileLogin'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthEnvelope'
+          description: ''
+  /api/auth/mobile/token/refresh/:
+    post:
+      operationId: auth_mobile_token_refresh_create
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecureTokenRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SecureTokenRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SecureTokenRefresh'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/auth/profile/signature/:
+    get:
+      operationId: auth_profile_signature_retrieve
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignatureEnvelope'
+          description: ''
+    put:
+      operationId: auth_profile_signature_update
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiEnvelope'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ApiEnvelope'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ApiEnvelope'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignatureEnvelope'
+          description: ''
+    delete:
+      operationId: auth_profile_signature_destroy
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignatureEnvelope'
+          description: ''
+  /api/auth/reset-password/:
+    post:
+      operationId: auth_reset_password_create
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPassword'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ResetPassword'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ResetPassword'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+          description: ''
+  /api/auth/users/:
+    get:
+      operationId: auth_users_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserRead'
+          description: ''
+  /api/auth/users/{id}/:
+    get:
+      operationId: auth_users_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRead'
+          description: ''
+  /api/auth/users/{id}/deactivate/:
+    patch:
+      operationId: auth_users_deactivate_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+          description: ''
+  /api/auth/users/create/:
+    post:
+      operationId: auth_users_create_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCreate'
+          description: ''
+  /api/dashboard/summary/:
+    get:
+      operationId: dashboard_summary_retrieve
+      parameters:
+      - in: query
+        name: days
+        schema:
+          type: integer
+      tags:
+      - dashboard
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummaryEnvelope'
+          description: ''
+  /api/delits/:
+    get:
+      operationId: delits_list
+      parameters:
+      - in: query
+        name: alert
+        schema:
+          type: integer
+      - in: query
+        name: delit_type
+        schema:
+          type: integer
+      - in: query
+        name: detected_by
+        schema:
+          type: integer
+      - in: query
+        name: driver
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      - in: query
+        name: procedure_status
+        schema:
+          type: string
+          enum:
+          - ACTION_TAKEN
+          - CANCELLED
+          - CLOSED
+          - OPEN
+          - REFERRED
+        description: |-
+          * `OPEN` - Ouvert
+          * `ACTION_TAKEN` - Mesure prise
+          * `REFERRED` - Transmis
+          * `CLOSED` - Clôturé
+          * `CANCELLED` - Annulé
+      - in: query
+        name: qualification_status
+        schema:
+          type: string
+          enum:
+          - CONFIRMED
+          - POTENTIAL
+          - REJECTED
+          - UNDER_REVIEW
+        description: |-
+          * `POTENTIAL` - Potentiel
+          * `UNDER_REVIEW` - En révision
+          * `CONFIRMED` - Confirmé
+          * `REJECTED` - Rejeté
+      - in: query
+        name: scan
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - in: query
+        name: source_type
+        schema:
+          type: string
+          enum:
+          - ALERT
+          - DRIVER_SEARCH
+          - LICENSE_SEARCH
+          - MANUAL_OBSERVATION
+          - PLATE_SCAN
+          - TICKET
+          - VEHICLE_CONTROL
+          - VERBALIZATION
+        description: |-
+          * `MANUAL_OBSERVATION` - Observation directe
+          * `PLATE_SCAN` - Scan ou recherche de plaque
+          * `DRIVER_SEARCH` - Recherche conducteur
+          * `LICENSE_SEARCH` - Recherche permis
+          * `VEHICLE_CONTROL` - Contrôle véhicule
+          * `TICKET` - Procès-verbal
+          * `VERBALIZATION` - Verbalisation
+          * `ALERT` - Alerte
+      - in: query
+        name: ticket
+        schema:
+          type: integer
+      - in: query
+        name: vehicle
+        schema:
+          type: integer
+      - in: query
+        name: verbalization
+        schema:
+          type: integer
+      tags:
+      - delits
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDelitCaseList'
+          description: ''
+    post:
+      operationId: delits_create
+      tags:
+      - delits
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelitCase'
+          description: ''
+  /api/delits/{id}/:
+    get:
+      operationId: delits_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) delit case.
+        required: true
+      tags:
+      - delits
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelitCase'
+          description: ''
+    patch:
+      operationId: delits_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) delit case.
+        required: true
+      tags:
+      - delits
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDelitCase'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDelitCase'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDelitCase'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelitCase'
+          description: ''
+  /api/delits/{id}/actions/:
+    post:
+      operationId: delits_actions_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) delit case.
+        required: true
+      tags:
+      - delits
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelitCase'
+          description: ''
+  /api/delits/{id}/cancel/:
+    post:
+      operationId: delits_cancel_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) delit case.
+        required: true
+      tags:
+      - delits
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelitCase'
+          description: ''
+  /api/delits/{id}/close/:
+    post:
+      operationId: delits_close_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) delit case.
+        required: true
+      tags:
+      - delits
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelitCase'
+          description: ''
+  /api/delits/{id}/confirm/:
+    post:
+      operationId: delits_confirm_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) delit case.
+        required: true
+      tags:
+      - delits
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelitCase'
+          description: ''
+  /api/delits/{id}/evidence/:
+    post:
+      operationId: delits_evidence_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) delit case.
+        required: true
+      tags:
+      - delits
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelitCase'
+          description: ''
+  /api/delits/{id}/evidence/{evidence_id}/download/:
+    get:
+      operationId: delits_evidence_download_retrieve
+      parameters:
+      - in: path
+        name: evidence_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) delit case.
+        required: true
+      tags:
+      - delits
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Fichier de preuve ou reference JSON
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+          description: ''
+  /api/delits/{id}/refer/:
+    post:
+      operationId: delits_refer_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) delit case.
+        required: true
+      tags:
+      - delits
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelitCase'
+          description: ''
+  /api/delits/{id}/reject/:
+    post:
+      operationId: delits_reject_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) delit case.
+        required: true
+      tags:
+      - delits
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelitCase'
+          description: ''
+  /api/delits/{id}/submit-review/:
+    post:
+      operationId: delits_submit_review_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) delit case.
+        required: true
+      tags:
+      - delits
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DelitCase'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelitCase'
+          description: ''
+  /api/delits/types/:
+    get:
+      operationId: delits_types_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      tags:
+      - delits
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DelitType'
+          description: ''
+  /api/delits/types/{id}/:
+    get:
+      operationId: delits_types_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) delit type.
+        required: true
+      tags:
+      - delits
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DelitType'
+          description: ''
+  /api/documents/:
+    get:
+      operationId: documents_list
+      description: Lecture réservée aux comptes professionnels actifs disposant d'un
+        rôle ADMIN, AGENT_TERRAIN ou AGENT_SAISIE.
+      summary: Lister les pièces jointes des véhicules
+      parameters:
+      - in: query
+        name: document_type
+        schema:
+          type: string
+        description: Filtrer par type de pièce jointe.
+      - name: ordering
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - in: query
+        name: uploaded_by
+        schema:
+          type: integer
+      - in: query
+        name: vehicle
+        schema:
+          type: integer
+        description: Filtrer par identifiant du véhicule.
+      tags:
+      - documents
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDocumentReadList'
+          description: ''
+    post:
+      operationId: documents_create
+      description: 'Permission : AGENT_SAISIE uniquement.'
+      summary: Ajouter une pièce jointe à un véhicule
+      tags:
+      - documents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DocumentCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentCreate'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentRead'
+          description: ''
+        '400':
+          description: Données ou fichier invalides.
+        '403':
+          description: Rôle non autorisé.
+  /api/documents/{id}/:
+    get:
+      operationId: documents_retrieve
+      summary: Consulter une pièce jointe
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Pièce jointe
+          véhicule.
+        required: true
+      tags:
+      - documents
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentRead'
+          description: ''
+        '404':
+          description: Document introuvable.
+    patch:
+      operationId: documents_partial_update
+      description: 'Permission : AGENT_SAISIE uniquement. Le fichier et le véhicule
+        ne sont pas modifiables par PATCH.'
+      summary: Modifier les métadonnées d'une pièce jointe
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Pièce jointe
+          véhicule.
+        required: true
+      tags:
+      - documents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDocumentUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDocumentUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDocumentUpdate'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentRead'
+          description: ''
+        '400':
+          description: Données invalides.
+        '403':
+          description: Rôle non autorisé.
+  /api/documents/{id}/download/:
+    get:
+      operationId: documents_download_retrieve
+      summary: Télécharger une pièce jointe
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Pièce jointe
+          véhicule.
+        required: true
+      tags:
+      - documents
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Flux binaire du fichier.
+        '404':
+          description: Document ou fichier introuvable.
+  /api/drivers/:
+    get:
+      operationId: drivers_list
+      description: 'Permission : compte professionnel actif avec rôle ADMIN, AGENT_TERRAIN
+        ou AGENT_SAISIE. Pagination de 40 éléments.'
+      summary: Lister les dossiers conducteurs
+      parameters:
+      - in: query
+        name: blood_group
+        schema:
+          type: string
+      - in: query
+        name: dossier_number
+        schema:
+          type: string
+      - in: query
+        name: license_type
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      - in: query
+        name: person__nif
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - in: query
+        name: sex
+        schema:
+          type: string
+          enum:
+          - F
+          - M
+        description: |-
+          * `M` - Masculin
+          * `F` - Féminin
+      tags:
+      - drivers
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDriverLicenseReadList'
+          description: ''
+        '401':
+          description: Authentification JWT requise.
+        '403':
+          description: Compte ou rôle non autorisé.
+    post:
+      operationId: drivers_create
+      description: 'Permission : AGENT_SAISIE uniquement. Fournir soit `person`, soit
+        `person_id`.'
+      summary: Créer un dossier conducteur
+      tags:
+      - drivers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DriverCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DriverCreate'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverLicenseRead'
+          description: ''
+        '400':
+          description: Données invalides.
+        '401':
+          description: Authentification JWT requise.
+        '403':
+          description: Seul un agent de saisie est autorisé.
+  /api/drivers/{id}/:
+    get:
+      operationId: drivers_retrieve
+      description: 'Permission : compte professionnel actif avec rôle autorisé.'
+      summary: Consulter un dossier conducteur
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Dossier conducteur.
+        required: true
+      tags:
+      - drivers
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverLicenseRead'
+          description: ''
+        '401':
+          description: Authentification JWT requise.
+        '403':
+          description: Compte ou rôle non autorisé.
+        '404':
+          description: Dossier introuvable.
+    patch:
+      operationId: drivers_partial_update
+      description: 'Permission : AGENT_SAISIE uniquement. PUT et DELETE ne sont pas
+        disponibles.'
+      summary: Modifier partiellement un dossier conducteur
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Dossier conducteur.
+        required: true
+      tags:
+      - drivers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDriverUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDriverUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDriverUpdate'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverLicenseRead'
+          description: ''
+        '400':
+          description: Données invalides.
+        '401':
+          description: Authentification JWT requise.
+        '403':
+          description: Seul un agent de saisie est autorisé.
+        '404':
+          description: Dossier introuvable.
+  /api/drivers/search/:
+    get:
+      operationId: drivers_search_retrieve
+      summary: Alias historique de recherche par dossier
+      tags:
+      - drivers
+      security:
+      - jwtAuth: []
+      deprecated: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverLicenseRead'
+          description: ''
+  /api/drivers/search-by-dossier/:
+    get:
+      operationId: drivers_search_by_dossier_retrieve
+      summary: Rechercher un permis par numéro de dossier
+      parameters:
+      - in: query
+        name: dossier_number
+        schema:
+          type: string
+        required: true
+        examples:
+          Dossier:
+            value: AB-12345-CD
+      tags:
+      - drivers
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Permis trouvé avec état de validité, tickets impayés et éventuelle
+            alerte judiciaire.
+        '400':
+          description: Paramètre absent ou vide.
+        '401':
+          description: Authentification JWT requise.
+        '403':
+          description: Compte ou rôle non autorisé.
+        '404':
+          description: Aucun permis trouvé.
+  /api/drivers/search-by-nif/:
+    get:
+      operationId: drivers_search_by_nif_retrieve
+      description: La recherche utilise Person.nif. Les espaces et tirets sont ignorés.
+      summary: Rechercher un permis par NIF
+      parameters:
+      - in: query
+        name: nif
+        schema:
+          type: string
+        required: true
+        examples:
+          NIF:
+            value: 001-234-567-8
+      tags:
+      - drivers
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: Permis trouvé.
+        '400':
+          description: Paramètre absent ou vide.
+        '401':
+          description: Authentification JWT requise.
+        '403':
+          description: Compte ou rôle non autorisé.
+        '404':
+          description: Aucun permis trouvé.
+  /api/infractions/:
+    get:
+      operationId: infractions_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      tags:
+      - infractions
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Infraction'
+          description: ''
+  /api/infractions/{id}/:
+    get:
+      operationId: infractions_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Infraction.
+        required: true
+      tags:
+      - infractions
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Infraction'
+          description: ''
+  /api/insurance/:
+    get:
+      operationId: insurance_list
+      description: Lecture réservée aux comptes professionnels actifs ADMIN, AGENT_TERRAIN
+        ou AGENT_SAISIE.
+      summary: Lister et rechercher les polices d'assurance
+      parameters:
+      - in: query
+        name: insurer
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      - in: query
+        name: plate_number
+        schema:
+          type: string
+        description: Plaque exacte normalisée.
+      - in: query
+        name: policy_number
+        schema:
+          type: string
+        description: Numéro de police exact, insensible à la casse.
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - CANCELLED
+          - EXPIRED
+          - SUSPENDED
+          - VALID
+        description: |-
+          * `VALID` - Valide
+          * `EXPIRED` - Expirée
+          * `SUSPENDED` - Suspendue
+          * `CANCELLED` - Annulée
+      - in: query
+        name: vehicle
+        schema:
+          type: integer
+      tags:
+      - insurance
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedInsurancePolicyReadList'
+          description: ''
+        '401':
+          description: Authentification JWT requise.
+        '403':
+          description: Compte ou rôle non autorisé.
+    post:
+      operationId: insurance_create
+      description: 'Permission : AGENT_SAISIE uniquement.'
+      summary: Créer une police d'assurance
+      tags:
+      - insurance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsurancePolicyWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InsurancePolicyWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InsurancePolicyWrite'
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsurancePolicyRead'
+          description: ''
+        '400':
+          description: Données invalides.
+        '403':
+          description: Rôle non autorisé.
+  /api/insurance/{id}/:
+    get:
+      operationId: insurance_retrieve
+      summary: Consulter une police d'assurance
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Police d'assurance.
+        required: true
+      tags:
+      - insurance
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsurancePolicyRead'
+          description: ''
+        '401':
+          description: Authentification JWT requise.
+        '403':
+          description: Compte ou rôle non autorisé.
+        '404':
+          description: Police introuvable.
+    patch:
+      operationId: insurance_partial_update
+      description: 'Permission : AGENT_SAISIE uniquement. PUT et DELETE ne sont pas
+        disponibles.'
+      summary: Modifier partiellement une police d'assurance
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Police d'assurance.
+        required: true
+      tags:
+      - insurance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedInsurancePolicyWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedInsurancePolicyWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedInsurancePolicyWrite'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsurancePolicyRead'
+          description: ''
+        '400':
+          description: Données invalides.
+        '403':
+          description: Rôle non autorisé.
+        '404':
+          description: Police introuvable.
+  /api/owners/:
+    get:
+      operationId: owners_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      tags:
+      - owners
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOwnerList'
+          description: ''
+    post:
+      operationId: owners_create
+      tags:
+      - owners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Owner'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Owner'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Owner'
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Owner'
+          description: ''
+  /api/owners/{id}/:
+    get:
+      operationId: owners_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Propriétaire.
+        required: true
+      tags:
+      - owners
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Owner'
+          description: ''
+    patch:
+      operationId: owners_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Propriétaire.
+        required: true
+      tags:
+      - owners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOwner'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOwner'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOwner'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Owner'
+          description: ''
+  /api/owners/{id}/vehicles/:
+    get:
+      operationId: owners_vehicles_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Propriétaire.
+        required: true
+      tags:
+      - owners
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Owner'
+          description: ''
+  /api/owners/owners/:
+    get:
+      operationId: owners_owners_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      tags:
+      - owners
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOwnerList'
+          description: ''
+    post:
+      operationId: owners_owners_create
+      tags:
+      - owners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Owner'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Owner'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Owner'
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Owner'
+          description: ''
+  /api/owners/owners/{id}/:
+    get:
+      operationId: owners_owners_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Propriétaire.
+        required: true
+      tags:
+      - owners
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Owner'
+          description: ''
+    patch:
+      operationId: owners_owners_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Propriétaire.
+        required: true
+      tags:
+      - owners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOwner'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOwner'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOwner'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Owner'
+          description: ''
+  /api/owners/owners/{id}/vehicles/:
+    get:
+      operationId: owners_owners_vehicles_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Propriétaire.
+        required: true
+      tags:
+      - owners
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Owner'
+          description: ''
+  /api/owners/vehicle-ownerships/:
+    get:
+      operationId: owners_vehicle_ownerships_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      tags:
+      - owners
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVehicleOwnershipList'
+          description: ''
+    post:
+      operationId: owners_vehicle_ownerships_create
+      tags:
+      - owners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleOwnership'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VehicleOwnership'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VehicleOwnership'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleOwnership'
+          description: ''
+  /api/owners/vehicle-ownerships/{id}/:
+    get:
+      operationId: owners_vehicle_ownerships_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Propriété
+          de véhicule.
+        required: true
+      tags:
+      - owners
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleOwnership'
+          description: ''
+  /api/owners/vehicle-ownerships/{id}/end/:
+    post:
+      operationId: owners_vehicle_ownerships_end_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Propriété
+          de véhicule.
+        required: true
+      tags:
+      - owners
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleOwnership'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VehicleOwnership'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VehicleOwnership'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleOwnership'
+          description: ''
+  /api/reports/agents/:
+    get:
+      operationId: reports_agents_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAgentReportList'
+          description: ''
+  /api/reports/delits/:
+    get:
+      operationId: reports_delits_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDelitReportList'
+          description: ''
+  /api/reports/infractions/:
+    get:
+      operationId: reports_infractions_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedInfractionReportList'
+          description: ''
+  /api/reports/summary/:
+    get:
+      operationId: reports_summary_retrieve
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+          description: ''
+  /api/reports/tickets/:
+    get:
+      operationId: reports_tickets_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTicketReportList'
+          description: ''
+  /api/reports/verbalizations/:
+    get:
+      operationId: reports_verbalizations_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVerbalizationReportList'
+          description: ''
+  /api/scans/:
+    get:
+      operationId: scans_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      tags:
+      - scans
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Scan'
+          description: ''
+  /api/scans/{id}/:
+    get:
+      operationId: scans_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) scan.
+        required: true
+      tags:
+      - scans
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scan'
+          description: ''
+  /api/scans/history/:
+    get:
+      operationId: scans_history_retrieve
+      tags:
+      - scans
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanHistoryEnvelope'
+          description: ''
+  /api/scans/history/{id}/image/:
+    get:
+      operationId: scans_history_image_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - scans
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Image du scan
+  /api/scans/last-scan/:
+    get:
+      operationId: scans_last_scan_retrieve
+      tags:
+      - scans
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeminiScanResponse'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeminiErrorResponse'
+          description: ''
+  /api/scans/recognize/:
+    post:
+      operationId: scans_recognize_create
+      tags:
+      - scans
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+          description: ''
+        '501':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+          description: ''
+  /api/scans/scan-plate/:
+    post:
+      operationId: scans_scan_plate_create
+      tags:
+      - scans
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeminiPlateImageUpload'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GeminiPlateImageUpload'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GeminiPlateImageUpload'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeminiScanResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeminiErrorResponse'
+          description: ''
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeminiErrorResponse'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeminiErrorResponse'
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeminiErrorResponse'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeminiErrorResponse'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeminiErrorResponse'
+          description: ''
+  /api/scans/search/:
+    get:
+      operationId: scans_search_retrieve
+      parameters:
+      - in: query
+        name: plate_number
+        schema:
+          type: string
+        required: true
+      tags:
+      - scans
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeminiScanResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeminiErrorResponse'
+          description: ''
+  /api/sync/devices/:
+    get:
+      operationId: sync_devices_retrieve
+      tags:
+      - sync
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+          description: ''
+  /api/sync/devices/register/:
+    post:
+      operationId: sync_devices_register_create
+      tags:
+      - sync
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncDeviceRegister'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SyncDeviceRegister'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SyncDeviceRegister'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+          description: ''
+  /api/sync/devices/revoke/:
+    post:
+      operationId: sync_devices_revoke_create
+      tags:
+      - sync
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncDeviceRevoke'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SyncDeviceRevoke'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SyncDeviceRevoke'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+          description: ''
+  /api/sync/pull/:
+    post:
+      operationId: sync_pull_create
+      tags:
+      - sync
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncPullRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SyncPullRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SyncPullRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncPullEnvelope'
+          description: ''
+  /api/sync/push/:
+    post:
+      operationId: sync_push_create
+      tags:
+      - sync
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncPushRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SyncPushRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SyncPushRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+          description: ''
+  /api/sync/status/:
+    get:
+      operationId: sync_status_retrieve
+      parameters:
+      - in: query
+        name: request_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - sync
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+          description: ''
+  /api/tickets/:
+    get:
+      operationId: tickets_list
+      parameters:
+      - in: query
+        name: client_uuid
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: driver
+        schema:
+          type: integer
+      - in: query
+        name: opened_by
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      - in: query
+        name: pricing_status
+        schema:
+          type: string
+          enum:
+          - AVAILABLE
+          - FAILED
+          - NOT_REQUESTED
+          - PENDING
+        description: |-
+          * `NOT_REQUESTED` - Non demandé
+          * `PENDING` - Demande en cours
+          * `AVAILABLE` - Disponible
+          * `FAILED` - Échec
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - CANCELLED
+          - CLOSED
+          - OPEN
+        description: |-
+          * `OPEN` - En cours
+          * `CLOSED` - Clôturé
+          * `CANCELLED` - Annulé
+      - in: query
+        name: sync_status
+        schema:
+          type: string
+          enum:
+          - FAILED
+          - PENDING
+          - SYNCED
+        description: |-
+          * `PENDING` - En attente
+          * `SYNCED` - Synchronisé
+          * `FAILED` - Échec
+      tags:
+      - tickets
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTicketListList'
+          description: ''
+    post:
+      operationId: tickets_create
+      tags:
+      - tickets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
+  /api/tickets/{id}/:
+    get:
+      operationId: tickets_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) ticket.
+        required: true
+      tags:
+      - tickets
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
+    patch:
+      operationId: tickets_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) ticket.
+        required: true
+      tags:
+      - tickets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTicket'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTicket'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTicket'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
+  /api/tickets/{id}/agent-signature/:
+    get:
+      operationId: tickets_agent_signature_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) ticket.
+        required: true
+      tags:
+      - tickets
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
+  /api/tickets/{id}/barcode/:
+    get:
+      operationId: tickets_barcode_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) ticket.
+        required: true
+      tags:
+      - tickets
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
+  /api/tickets/{id}/cancel/:
+    post:
+      operationId: tickets_cancel_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) ticket.
+        required: true
+      tags:
+      - tickets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
+  /api/tickets/{id}/close/:
+    post:
+      operationId: tickets_close_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) ticket.
+        required: true
+      tags:
+      - tickets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
+  /api/tickets/{id}/verbalizations/:
+    post:
+      operationId: tickets_verbalizations_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) ticket.
+        required: true
+      tags:
+      - tickets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
+  /api/tickets/{id}/verbalizations/{verbalization_id}/cancel/:
+    post:
+      operationId: tickets_verbalizations_cancel_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) ticket.
+        required: true
+      - in: path
+        name: verbalization_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - tickets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reason'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Reason'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Reason'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketVerbalization'
+          description: ''
+  /api/tickets/{id}/verbalizations/{verbalization_id}/proofs/:
+    post:
+      operationId: tickets_verbalizations_proofs_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) ticket.
+        required: true
+      - in: path
+        name: verbalization_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - tickets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketProof'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TicketProof'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TicketProof'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketProof'
+          description: ''
+  /api/tickets/{id}/verbalizations/{verbalization_id}/proofs/{proof_id}/download/:
+    get:
+      operationId: tickets_verbalizations_proofs_download_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) ticket.
+        required: true
+      - in: path
+        name: proof_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: verbalization_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - tickets
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Fichier de preuve
+  /api/tickets/open/:
+    get:
+      operationId: tickets_open_retrieve
+      tags:
+      - tickets
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
+  /api/vehicles/:
+    get:
+      operationId: vehicles_list
+      description: Lecture réservée aux comptes professionnels actifs ADMIN, AGENT_TERRAIN
+        ou AGENT_SAISIE.
+      summary: Lister les véhicules
+      parameters:
+      - in: query
+        name: brand
+        schema:
+          type: string
+      - in: query
+        name: is_wanted
+        schema:
+          type: boolean
+      - in: query
+        name: model
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Quel champ utiliser pour classer les résultats.
+        schema:
+          type: string
+      - in: query
+        name: owner
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: Un numéro de page de l'ensemble des résultats.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Nombre de résultats à retourner par page.
+        schema:
+          type: integer
+      - in: query
+        name: plate_number
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: Un terme de recherche.
+        schema:
+          type: string
+      tags:
+      - vehicles
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVehicleReadList'
+          description: ''
+        '401':
+          description: Authentification JWT requise.
+        '403':
+          description: Compte ou rôle non autorisé.
+    post:
+      operationId: vehicles_create
+      description: 'Permission : AGENT_SAISIE uniquement.'
+      summary: Créer un véhicule
+      tags:
+      - vehicles
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VehicleWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VehicleWrite'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleRead'
+          description: ''
+        '400':
+          description: Données invalides.
+        '401':
+          description: Authentification JWT requise.
+        '403':
+          description: Seul un agent de saisie est autorisé.
+  /api/vehicles/{id}/:
+    get:
+      operationId: vehicles_retrieve
+      summary: Consulter un véhicule
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Véhicule.
+        required: true
+      tags:
+      - vehicles
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleRead'
+          description: ''
+        '401':
+          description: Authentification JWT requise.
+        '403':
+          description: Compte ou rôle non autorisé.
+        '404':
+          description: Véhicule introuvable.
+    patch:
+      operationId: vehicles_partial_update
+      description: 'Permission : AGENT_SAISIE uniquement. PUT et DELETE ne sont pas
+        disponibles.'
+      summary: Modifier partiellement un véhicule
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un(une) valeur entière unique identifiant ce(cette) Véhicule.
+        required: true
+      tags:
+      - vehicles
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedVehicleWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedVehicleWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedVehicleWrite'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleRead'
+          description: ''
+        '400':
+          description: Données invalides.
+        '401':
+          description: Authentification JWT requise.
+        '403':
+          description: Seul un agent de saisie est autorisé.
+        '404':
+          description: Véhicule introuvable.
+  /api/vehicles/by-plate/{plate_number}/:
+    get:
+      operationId: vehicles_by_plate_retrieve
+      description: Normalise les espaces, les tirets et la casse avant d'effectuer
+        une recherche exacte.
+      summary: Rechercher exactement un véhicule par plaque
+      parameters:
+      - in: path
+        name: plate_number
+        schema:
+          type: string
+        required: true
+      tags:
+      - vehicles
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleRead'
+          description: ''
+        '400':
+          description: Plaque vide ou invalide.
+        '401':
+          description: Authentification JWT requise.
+        '403':
+          description: Compte ou rôle non autorisé.
+        '404':
+          description: Véhicule introuvable.
+components:
+  schemas:
+    AccountTypeEnum:
+      enum:
+      - PROFESSIONAL
+      - PERSONAL
+      type: string
+      description: |-
+        * `PROFESSIONAL` - Professionnel
+        * `PERSONAL` - Personnel
+    ActionTypeEnum:
+      enum:
+      - IDENTITY_CHECK
+      - LICENSE_RETAINED
+      - DOCUMENT_SEIZED
+      - VEHICLE_IMMOBILIZED
+      - VEHICLE_TOWED
+      - PERSON_INTERCEPTED
+      - PERSON_ARRESTED
+      - REFERRED_TO_AUTHORITY
+      - DOCUMENT_RETURNED
+      - VEHICLE_RELEASED
+      - PERSON_RELEASED
+      - OTHER
+      type: string
+      description: |-
+        * `IDENTITY_CHECK` - Contrôle d’identité
+        * `LICENSE_RETAINED` - Permis retenu
+        * `DOCUMENT_SEIZED` - Document saisi
+        * `VEHICLE_IMMOBILIZED` - Véhicule immobilisé
+        * `VEHICLE_TOWED` - Véhicule remorqué
+        * `PERSON_INTERCEPTED` - Personne interceptée
+        * `PERSON_ARRESTED` - Personne arrêtée
+        * `REFERRED_TO_AUTHORITY` - Transmis à une autorité
+        * `DOCUMENT_RETURNED` - Document restitué
+        * `VEHICLE_RELEASED` - Véhicule libéré
+        * `PERSON_RELEASED` - Personne libérée
+        * `OTHER` - Autre
+    AgentProfileRead:
+      type: object
+      properties:
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        role_label:
+          type: string
+          readOnly: true
+        badge_number:
+          type: string
+          maxLength: 40
+        post:
+          type: string
+          maxLength: 120
+        precinct:
+          type: string
+          maxLength: 120
+        signature_updated_at:
+          type: string
+          format: date-time
+          nullable: true
+        is_active:
+          type: boolean
+      required:
+      - badge_number
+      - role
+      - role_label
+    AgentProfileWrite:
+      type: object
+      properties:
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        badge_number:
+          type: string
+          maxLength: 40
+        post:
+          type: string
+          maxLength: 120
+        precinct:
+          type: string
+          maxLength: 120
+        is_active:
+          type: boolean
+      required:
+      - badge_number
+      - role
+    AgentReport:
+      type: object
+      properties:
+        user_id:
+          type: integer
+        full_name:
+          type: string
+        email:
+          type: string
+          format: email
+        badge_number:
+          type: string
+        role:
+          type: string
+        tickets_opened:
+          type: integer
+        verbalizations_created:
+          type: integer
+        proofs_added:
+          type: integer
+        delit_cases_created:
+          type: integer
+        delit_actions_recorded:
+          type: integer
+      required:
+      - badge_number
+      - delit_actions_recorded
+      - delit_cases_created
+      - email
+      - full_name
+      - proofs_added
+      - role
+      - tickets_opened
+      - user_id
+      - verbalizations_created
+    Alert:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/AlertCategoryEnum'
+          readOnly: true
+        category_display:
+          type: string
+          readOnly: true
+        alert_type:
+          $ref: '#/components/schemas/AlertTypeEnum'
+        alert_type_display:
+          type: string
+          readOnly: true
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/AlertStatusEnum'
+          readOnly: true
+        status_display:
+          type: string
+          readOnly: true
+        vehicle:
+          type: integer
+          nullable: true
+        plate_number:
+          type: string
+          maxLength: 20
+        description:
+          type: string
+        created_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        created_by_name:
+          type: string
+          nullable: true
+          readOnly: true
+        created_by_role:
+          type: string
+          nullable: true
+          readOnly: true
+        source:
+          allOf:
+          - $ref: '#/components/schemas/SourceEnum'
+          readOnly: true
+        subject_person:
+          type: integer
+          readOnly: true
+          nullable: true
+        subject_nif:
+          type: string
+          readOnly: true
+        system_reasons:
+          readOnly: true
+        control_period_start:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        control_period_end:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        document_expires_on:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        resolved_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        resolution_note:
+          type: string
+          readOnly: true
+        is_opened:
+          type: boolean
+          readOnly: true
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertEvidence'
+          readOnly: true
+        evidence_type:
+          allOf:
+          - $ref: '#/components/schemas/AlertEvidenceTypeEnum'
+          writeOnly: true
+        evidence_file:
+          type: string
+          format: uri
+          writeOnly: true
+        evidence_duration_seconds:
+          type: integer
+          minimum: 0
+          writeOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - alert_type
+      - alert_type_display
+      - category
+      - category_display
+      - control_period_end
+      - control_period_start
+      - created_at
+      - created_by
+      - created_by_name
+      - created_by_role
+      - document_expires_on
+      - evidence
+      - expires_at
+      - id
+      - is_opened
+      - resolution_note
+      - resolved_at
+      - resolved_by
+      - severity
+      - source
+      - status
+      - status_display
+      - subject_nif
+      - subject_person
+      - system_reasons
+      - updated_at
+    AlertCategoryEnum:
+      enum:
+      - AUTOMATIC
+      - FIELD_REPORT
+      - ADMINISTRATIVE
+      type: string
+      description: |-
+        * `AUTOMATIC` - Automatique
+        * `FIELD_REPORT` - Signalement terrain
+        * `ADMINISTRATIVE` - Administrative
+    AlertClose:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 500
+      required:
+      - note
+    AlertEvidence:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        evidence_type:
+          allOf:
+          - $ref: '#/components/schemas/AlertEvidenceTypeEnum'
+          readOnly: true
+        mime_type:
+          type: string
+          readOnly: true
+        size_bytes:
+          type: integer
+          readOnly: true
+          nullable: true
+        duration_seconds:
+          type: integer
+          readOnly: true
+          nullable: true
+        checksum_sha256:
+          type: string
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - checksum_sha256
+      - created_at
+      - duration_seconds
+      - evidence_type
+      - id
+      - mime_type
+      - size_bytes
+      - url
+    AlertEvidenceTypeEnum:
+      enum:
+      - AUDIO
+      - VIDEO
+      type: string
+      description: |-
+        * `AUDIO` - Audio
+        * `VIDEO` - Vidéo
+    AlertList:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/AlertCategoryEnum'
+          readOnly: true
+        category_display:
+          type: string
+          readOnly: true
+        alert_type:
+          allOf:
+          - $ref: '#/components/schemas/AlertTypeEnum'
+          readOnly: true
+        alert_type_display:
+          type: string
+          readOnly: true
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/AlertStatusEnum'
+          readOnly: true
+        plate_number:
+          type: string
+          readOnly: true
+        source:
+          allOf:
+          - $ref: '#/components/schemas/SourceEnum'
+          readOnly: true
+        is_opened:
+          type: boolean
+          readOnly: true
+        document_expires_on:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - alert_type
+      - alert_type_display
+      - category
+      - category_display
+      - created_at
+      - document_expires_on
+      - expires_at
+      - id
+      - is_opened
+      - plate_number
+      - severity
+      - source
+      - status
+    AlertStatusEnum:
+      enum:
+      - ACTIVE
+      - RESOLVED
+      - CANCELLED
+      - EXPIRED
+      type: string
+      description: |-
+        * `ACTIVE` - Active
+        * `RESOLVED` - Résolue
+        * `CANCELLED` - Annulée
+        * `EXPIRED` - Expirée
+    AlertTypeEnum:
+      enum:
+      - FIELD_ESCAPE
+      - REFUSED_CONTROL
+      - SUSPICIOUS_BEHAVIOR
+      - WANTED_VEHICLE
+      - STOLEN_PLATE
+      - JUDICIAL_ALERT
+      - DOCUMENT_EXPIRY_WARNING
+      type: string
+      description: |-
+        * `FIELD_ESCAPE` - Fuite lors du contrôle
+        * `REFUSED_CONTROL` - Refus de contrôle
+        * `SUSPICIOUS_BEHAVIOR` - Comportement suspect
+        * `WANTED_VEHICLE` - Véhicule volé ou recherché
+        * `STOLEN_PLATE` - Plaque volée
+        * `JUDICIAL_ALERT` - Alerte judiciaire
+        * `DOCUMENT_EXPIRY_WARNING` - Document proche de l'expiration
+    ApiEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data: {}
+        errors: {}
+      required:
+      - data
+      - errors
+      - message
+      - success
+    AuthEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/AuthTokens'
+        errors: {}
+      required:
+      - data
+      - errors
+      - message
+      - success
+    AuthTokens:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        account_type:
+          type: string
+        role:
+          type: string
+        user: {}
+      required:
+      - access_token
+    BlankEnum:
+      enum:
+      - ''
+    ChangePassword:
+      type: object
+      properties:
+        old_password:
+          type: string
+          writeOnly: true
+        new_password:
+          type: string
+          writeOnly: true
+        confirm_password:
+          type: string
+          writeOnly: true
+      required:
+      - confirm_password
+      - new_password
+      - old_password
+    DashboardSummaryEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data: {}
+        errors: {}
+      required:
+      - data
+      - errors
+      - message
+      - success
+    DelitAction:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        action_type:
+          $ref: '#/components/schemas/ActionTypeEnum'
+        performed_by:
+          type: integer
+          readOnly: true
+        performed_at:
+          type: string
+          format: date-time
+        location_label:
+          type: string
+          maxLength: 255
+        authority:
+          type: string
+          maxLength: 160
+        reference_number:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - action_type
+      - created_at
+      - description
+      - id
+      - performed_by
+    DelitCase:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        client_uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        case_number:
+          type: string
+          readOnly: true
+        delit_type:
+          type: integer
+        delit_type_detail:
+          allOf:
+          - $ref: '#/components/schemas/DelitType'
+          readOnly: true
+        source_type:
+          allOf:
+          - $ref: '#/components/schemas/SourceTypeEnum'
+          readOnly: true
+        scan:
+          type: integer
+          nullable: true
+        ticket:
+          type: integer
+          nullable: true
+        verbalization:
+          type: integer
+          nullable: true
+        alert:
+          type: integer
+          nullable: true
+        infraction:
+          type: integer
+          nullable: true
+        driver:
+          type: integer
+          nullable: true
+        vehicle:
+          type: integer
+          nullable: true
+        plate_number_snapshot:
+          type: string
+          maxLength: 20
+        facts:
+          type: string
+        detected_at:
+          type: string
+          format: date-time
+        detected_by:
+          type: integer
+          readOnly: true
+        detected_by_name:
+          type: string
+          readOnly: true
+        detected_by_badge_number:
+          type: string
+          readOnly: true
+        location_label:
+          type: string
+          maxLength: 255
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        qualification_status:
+          allOf:
+          - $ref: '#/components/schemas/QualificationStatusEnum'
+          readOnly: true
+        procedure_status:
+          allOf:
+          - $ref: '#/components/schemas/ProcedureStatusEnum'
+          readOnly: true
+        reviewed_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        reviewed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        review_note:
+          type: string
+          readOnly: true
+        referred_to:
+          type: string
+          readOnly: true
+        external_reference:
+          type: string
+          readOnly: true
+        referred_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        closed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        closed_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        closure_reason:
+          type: string
+          readOnly: true
+        cancelled_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        cancelled_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        cancellation_reason:
+          type: string
+          readOnly: true
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DelitAction'
+          readOnly: true
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/DelitEvidence'
+          readOnly: true
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/DelitHistory'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - actions
+      - cancellation_reason
+      - cancelled_at
+      - cancelled_by
+      - case_number
+      - client_uuid
+      - closed_at
+      - closed_by
+      - closure_reason
+      - created_at
+      - delit_type
+      - delit_type_detail
+      - detected_by
+      - detected_by_badge_number
+      - detected_by_name
+      - evidence
+      - external_reference
+      - facts
+      - history
+      - id
+      - procedure_status
+      - qualification_status
+      - referred_at
+      - referred_to
+      - review_note
+      - reviewed_at
+      - reviewed_by
+      - source_type
+      - updated_at
+    DelitEvidence:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        scan:
+          type: integer
+          nullable: true
+        ticket_proof:
+          type: integer
+          nullable: true
+        alert_evidence:
+          type: integer
+          nullable: true
+        file:
+          type: string
+          format: uri
+          writeOnly: true
+          nullable: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        evidence_type:
+          $ref: '#/components/schemas/DelitEvidenceTypeEnum'
+        mime_type:
+          type: string
+          readOnly: true
+        size_bytes:
+          type: integer
+          readOnly: true
+          nullable: true
+        checksum_sha256:
+          type: string
+          readOnly: true
+        duration_seconds:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        caption:
+          type: string
+          maxLength: 255
+        captured_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_by:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - checksum_sha256
+      - created_at
+      - created_by
+      - evidence_type
+      - id
+      - mime_type
+      - size_bytes
+      - url
+    DelitEvidenceTypeEnum:
+      enum:
+      - PHOTO
+      - VIDEO
+      - AUDIO
+      - DOCUMENT
+      - STATEMENT
+      - OTHER
+      type: string
+      description: |-
+        * `PHOTO` - Photo
+        * `VIDEO` - Vidéo
+        * `AUDIO` - Audio
+        * `DOCUMENT` - Document
+        * `STATEMENT` - Déclaration
+        * `OTHER` - Autre
+    DelitHistory:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        previous_qualification_status:
+          type: string
+          readOnly: true
+        new_qualification_status:
+          type: string
+          readOnly: true
+        previous_procedure_status:
+          type: string
+          readOnly: true
+        new_procedure_status:
+          type: string
+          readOnly: true
+        changed_by:
+          type: integer
+          readOnly: true
+        changed_at:
+          type: string
+          format: date-time
+          readOnly: true
+        reason:
+          type: string
+          readOnly: true
+      required:
+      - changed_at
+      - changed_by
+      - id
+      - new_procedure_status
+      - new_qualification_status
+      - previous_procedure_status
+      - previous_qualification_status
+      - reason
+    DelitReport:
+      type: object
+      properties:
+        id:
+          type: integer
+        case_number:
+          type: string
+        delit_type_code:
+          type: string
+        delit_type_label:
+          type: string
+        source_type:
+          type: string
+        qualification_status:
+          type: string
+        procedure_status:
+          type: string
+        driver_id:
+          type: integer
+          nullable: true
+        vehicle_id:
+          type: integer
+          nullable: true
+        ticket_id:
+          type: integer
+          nullable: true
+        verbalization_id:
+          type: integer
+          nullable: true
+        scan_id:
+          type: integer
+          nullable: true
+        detected_at:
+          type: string
+          format: date-time
+        detected_by_id:
+          type: integer
+        detected_by_name:
+          type: string
+        location_label:
+          type: string
+        evidence_count:
+          type: integer
+        action_count:
+          type: integer
+      required:
+      - action_count
+      - case_number
+      - delit_type_code
+      - delit_type_label
+      - detected_at
+      - detected_by_id
+      - detected_by_name
+      - driver_id
+      - evidence_count
+      - id
+      - location_label
+      - procedure_status
+      - qualification_status
+      - scan_id
+      - source_type
+      - ticket_id
+      - vehicle_id
+      - verbalization_id
+    DelitType:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          readOnly: true
+        label:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        legal_basis:
+          type: string
+          readOnly: true
+        active:
+          type: boolean
+          readOnly: true
+        display_order:
+          type: integer
+          readOnly: true
+      required:
+      - active
+      - code
+      - description
+      - display_order
+      - id
+      - label
+      - legal_basis
+    DetailError:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    DocumentCreate:
+      type: object
+      properties:
+        vehicle:
+          type: integer
+        document_type:
+          $ref: '#/components/schemas/DocumentTypeEnum'
+        title:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        file:
+          type: string
+          format: uri
+      required:
+      - file
+      - title
+      - vehicle
+    DocumentRead:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        vehicle_id:
+          type: integer
+          readOnly: true
+        document_type:
+          allOf:
+          - $ref: '#/components/schemas/DocumentTypeEnum'
+          readOnly: true
+        document_type_label:
+          type: string
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        original_filename:
+          type: string
+          readOnly: true
+        mime_type:
+          type: string
+          readOnly: true
+        size_bytes:
+          type: integer
+          readOnly: true
+        uploaded_by_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        download_url:
+          type: string
+          format: uri
+          readOnly: true
+      required:
+      - created_at
+      - description
+      - document_type
+      - document_type_label
+      - download_url
+      - id
+      - mime_type
+      - original_filename
+      - size_bytes
+      - title
+      - updated_at
+      - uploaded_by_id
+      - vehicle_id
+    DocumentTypeEnum:
+      enum:
+      - VEHICLE_PHOTO
+      - REGISTRATION_COPY
+      - INSURANCE_COPY
+      - INSPECTION_COPY
+      - SUPPORTING_DOCUMENT
+      - OTHER
+      type: string
+      description: |-
+        * `VEHICLE_PHOTO` - Photo du véhicule
+        * `REGISTRATION_COPY` - Copie de carte grise
+        * `INSURANCE_COPY` - Copie d'assurance
+        * `INSPECTION_COPY` - Copie de contrôle technique
+        * `SUPPORTING_DOCUMENT` - Pièce justificative
+        * `OTHER` - Autre
+    DriverCreate:
+      type: object
+      description: |-
+        Crée un Driver avec :
+        - soit `person` pour créer une nouvelle Person ;
+        - soit `person_id` pour utiliser une Person existante.
+      properties:
+        person:
+          allOf:
+          - $ref: '#/components/schemas/PersonDriverWrite'
+          writeOnly: true
+        person_id:
+          type: integer
+          writeOnly: true
+        dossier_number:
+          type: string
+          maxLength: 50
+        address:
+          type: string
+          maxLength: 255
+        sex:
+          oneOf:
+          - $ref: '#/components/schemas/SexEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        blood_group:
+          type: string
+          maxLength: 5
+        license_type:
+          type: string
+          maxLength: 80
+        issue_place:
+          type: string
+          maxLength: 120
+        issue_date:
+          type: string
+          format: date
+          nullable: true
+        expires_at:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - dossier_number
+      - license_type
+    DriverLicenseRead:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        person:
+          allOf:
+          - $ref: '#/components/schemas/PersonDriverRead'
+          readOnly: true
+        dossier_number:
+          type: string
+          readOnly: true
+        nif:
+          type: string
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        address:
+          type: string
+          readOnly: true
+        birth_date:
+          type: string
+          format: date
+          readOnly: true
+        sex:
+          allOf:
+          - $ref: '#/components/schemas/SexEnum'
+          readOnly: true
+        blood_group:
+          type: string
+          readOnly: true
+        license_type:
+          type: string
+          readOnly: true
+        issue_place:
+          type: string
+          readOnly: true
+        issue_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        expires_at:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        is_currently_valid:
+          type: boolean
+          readOnly: true
+        validity_state:
+          type: string
+          readOnly: true
+      required:
+      - address
+      - birth_date
+      - blood_group
+      - created_at
+      - dossier_number
+      - expires_at
+      - full_name
+      - id
+      - is_currently_valid
+      - issue_date
+      - issue_place
+      - license_type
+      - nif
+      - person
+      - sex
+      - updated_at
+      - validity_state
+    DriverRead:
+      type: object
+      properties:
+        dossier_number:
+          type: string
+          maxLength: 50
+        address:
+          type: string
+          maxLength: 255
+        sex:
+          oneOf:
+          - $ref: '#/components/schemas/SexEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        blood_group:
+          type: string
+          maxLength: 5
+        license_type:
+          type: string
+          maxLength: 80
+        issue_place:
+          type: string
+          maxLength: 120
+        issue_date:
+          type: string
+          format: date
+          nullable: true
+        expires_at:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - dossier_number
+      - license_type
+    DriverWrite:
+      type: object
+      properties:
+        dossier_number:
+          type: string
+          maxLength: 50
+        address:
+          type: string
+          maxLength: 255
+        sex:
+          oneOf:
+          - $ref: '#/components/schemas/SexEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        blood_group:
+          type: string
+          maxLength: 5
+        license_type:
+          type: string
+          maxLength: 80
+        issue_place:
+          type: string
+          maxLength: 120
+        issue_date:
+          type: string
+          format: date
+          nullable: true
+        expires_at:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - dossier_number
+      - license_type
+    EmptyEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        errors: {}
+      required:
+      - errors
+      - message
+      - success
+    ForgotPassword:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+      required:
+      - email
+    GeminiErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+        errors: {}
+      required:
+      - message
+      - status
+    GeminiPlateImageUpload:
+      type: object
+      properties:
+        image:
+          type: string
+          format: uri
+      required:
+      - image
+    GeminiScanResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+        raw_response:
+          type: string
+        plate_number:
+          type: string
+        plate_detected:
+          type: boolean
+        model_used:
+          type: string
+        vehicle:
+          nullable: true
+        documents: {}
+        tickets: {}
+        scanned_at:
+          type: string
+          nullable: true
+      required:
+      - documents
+      - model_used
+      - plate_detected
+      - plate_number
+      - raw_response
+      - scanned_at
+      - status
+      - tickets
+      - vehicle
+    Infraction:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          readOnly: true
+        number:
+          type: integer
+          readOnly: true
+        label:
+          type: string
+          readOnly: true
+        article:
+          type: string
+          readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/InfractionCategoryEnum'
+          readOnly: true
+        category_label:
+          type: string
+          readOnly: true
+        penalty_type:
+          allOf:
+          - $ref: '#/components/schemas/PenaltyTypeEnum'
+          readOnly: true
+        penalty_type_label:
+          type: string
+          readOnly: true
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        minimum_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        maximum_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        amount_options:
+          readOnly: true
+        penalty_text:
+          type: string
+          readOnly: true
+        penalty_summary:
+          type: string
+          readOnly: true
+        currency:
+          type: string
+          readOnly: true
+        legal_classification:
+          allOf:
+          - $ref: '#/components/schemas/LegalClassificationEnum'
+          readOnly: true
+        legal_classification_label:
+          type: string
+          readOnly: true
+        requires_authority_review:
+          type: boolean
+          readOnly: true
+        authority_review_note:
+          type: string
+          readOnly: true
+        active:
+          type: boolean
+          readOnly: true
+        display_order:
+          type: integer
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - active
+      - amount
+      - amount_options
+      - article
+      - authority_review_note
+      - category
+      - category_label
+      - code
+      - currency
+      - display_order
+      - id
+      - label
+      - legal_classification
+      - legal_classification_label
+      - maximum_amount
+      - minimum_amount
+      - number
+      - penalty_summary
+      - penalty_text
+      - penalty_type
+      - penalty_type_label
+      - requires_authority_review
+      - updated_at
+    InfractionCategoryEnum:
+      enum:
+      - CIRCULATION
+      - PARKING
+      - DOCUMENTS
+      - REGISTRATION
+      - EQUIPMENT
+      - DRIVER_BEHAVIOR
+      - PUBLIC_TRANSPORT
+      - ACCIDENT
+      - ROAD_INFRASTRUCTURE
+      - OTHER
+      type: string
+      description: |-
+        * `CIRCULATION` - Circulation
+        * `PARKING` - Arrêt et stationnement
+        * `DOCUMENTS` - Documents
+        * `REGISTRATION` - Immatriculation
+        * `EQUIPMENT` - Équipement du véhicule
+        * `DRIVER_BEHAVIOR` - Comportement du conducteur
+        * `PUBLIC_TRANSPORT` - Transport public
+        * `ACCIDENT` - Accident
+        * `ROAD_INFRASTRUCTURE` - Voie et signalisation
+        * `OTHER` - Autre
+    InfractionReport:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        article:
+          type: string
+        penalty_type:
+          type: string
+        currency:
+          type: string
+        observation_count:
+          type: integer
+        ticket_count:
+          type: integer
+        verbalization_count:
+          type: integer
+        last_observed_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - article
+      - code
+      - currency
+      - label
+      - last_observed_at
+      - observation_count
+      - penalty_type
+      - ticket_count
+      - verbalization_count
+    InsurancePolicyRead:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        vehicle:
+          type: integer
+          readOnly: true
+        plate_number:
+          type: string
+          readOnly: true
+        owner_name:
+          type: string
+          nullable: true
+          readOnly: true
+        insurer:
+          type: string
+          readOnly: true
+        policy_number:
+          type: string
+          readOnly: true
+        valid_from:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        valid_until:
+          type: string
+          format: date
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/InsurancePolicyStatusEnum'
+          readOnly: true
+        status_label:
+          type: string
+          readOnly: true
+        is_currently_valid:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - insurer
+      - is_currently_valid
+      - owner_name
+      - plate_number
+      - policy_number
+      - status
+      - status_label
+      - updated_at
+      - valid_from
+      - valid_until
+      - vehicle
+    InsurancePolicyStatusEnum:
+      enum:
+      - VALID
+      - EXPIRED
+      - SUSPENDED
+      - CANCELLED
+      type: string
+      description: |-
+        * `VALID` - Valide
+        * `EXPIRED` - Expirée
+        * `SUSPENDED` - Suspendue
+        * `CANCELLED` - Annulée
+    InsurancePolicyWrite:
+      type: object
+      properties:
+        vehicle:
+          type: integer
+        insurer:
+          type: string
+          maxLength: 150
+        policy_number:
+          type: string
+          maxLength: 80
+        valid_from:
+          type: string
+          format: date
+          nullable: true
+        valid_until:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/InsurancePolicyStatusEnum'
+    LegalClassificationEnum:
+      enum:
+      - CONTRAVENTION
+      - POSSIBLE_OFFENSE
+      - OFFENSE
+      - TO_VALIDATE
+      type: string
+      description: |-
+        * `CONTRAVENTION` - Contravention
+        * `POSSIBLE_OFFENSE` - Délit potentiel à valider
+        * `OFFENSE` - Délit confirmé
+        * `TO_VALIDATE` - Qualification à valider
+    MobileLogin:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        username:
+          type: string
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - password
+    OperationEnum:
+      enum:
+      - CREATE
+      - UPDATE
+      - UPSERT
+      type: string
+      description: |-
+        * `CREATE` - Création
+        * `UPDATE` - Mise à jour
+        * `UPSERT` - Création ou mise à jour
+    Owner:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        person:
+          allOf:
+          - $ref: '#/components/schemas/PersonSummary'
+          readOnly: true
+        person_id:
+          type: integer
+          writeOnly: true
+        person_data:
+          allOf:
+          - $ref: '#/components/schemas/PersonInput'
+          writeOnly: true
+        nif:
+          type: string
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        birth_date:
+          type: string
+          format: date
+          readOnly: true
+        phone:
+          type: string
+          maxLength: 30
+        address:
+          type: string
+          maxLength: 255
+        is_active:
+          type: boolean
+        current_vehicle_count:
+          type: integer
+          readOnly: true
+        created_by:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - birth_date
+      - created_at
+      - created_by
+      - current_vehicle_count
+      - full_name
+      - id
+      - nif
+      - person
+      - updated_at
+    OwnershipTypeEnum:
+      enum:
+      - FULL_OWNER
+      - CO_OWNER
+      - LEGAL_CUSTODIAN
+      - COMPANY_VEHICLE
+      - GOVERNMENT_VEHICLE
+      - TEMPORARY_HOLDER
+      type: string
+      description: |-
+        * `FULL_OWNER` - Propriétaire principal
+        * `CO_OWNER` - Copropriétaire
+        * `LEGAL_CUSTODIAN` - Détenteur légal
+        * `COMPANY_VEHICLE` - Véhicule d'entreprise
+        * `GOVERNMENT_VEHICLE` - Véhicule administratif
+        * `TEMPORARY_HOLDER` - Détenteur temporaire
+    PaginatedAgentReportList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentReport'
+    PaginatedAlertListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertList'
+    PaginatedDelitCaseList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DelitCase'
+    PaginatedDelitReportList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DelitReport'
+    PaginatedDocumentReadList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentRead'
+    PaginatedDriverLicenseReadList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriverLicenseRead'
+    PaginatedInfractionReportList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/InfractionReport'
+    PaginatedInsurancePolicyReadList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/InsurancePolicyRead'
+    PaginatedOwnerList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Owner'
+    PaginatedTicketListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketList'
+    PaginatedTicketReportList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketReport'
+    PaginatedVehicleOwnershipList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/VehicleOwnership'
+    PaginatedVehicleReadList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/VehicleRead'
+    PaginatedVerbalizationReportList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerbalizationReport'
+    PatchedAlert:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/AlertCategoryEnum'
+          readOnly: true
+        category_display:
+          type: string
+          readOnly: true
+        alert_type:
+          $ref: '#/components/schemas/AlertTypeEnum'
+        alert_type_display:
+          type: string
+          readOnly: true
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/AlertStatusEnum'
+          readOnly: true
+        status_display:
+          type: string
+          readOnly: true
+        vehicle:
+          type: integer
+          nullable: true
+        plate_number:
+          type: string
+          maxLength: 20
+        description:
+          type: string
+        created_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        created_by_name:
+          type: string
+          nullable: true
+          readOnly: true
+        created_by_role:
+          type: string
+          nullable: true
+          readOnly: true
+        source:
+          allOf:
+          - $ref: '#/components/schemas/SourceEnum'
+          readOnly: true
+        subject_person:
+          type: integer
+          readOnly: true
+          nullable: true
+        subject_nif:
+          type: string
+          readOnly: true
+        system_reasons:
+          readOnly: true
+        control_period_start:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        control_period_end:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        document_expires_on:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        resolved_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        resolution_note:
+          type: string
+          readOnly: true
+        is_opened:
+          type: boolean
+          readOnly: true
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertEvidence'
+          readOnly: true
+        evidence_type:
+          allOf:
+          - $ref: '#/components/schemas/AlertEvidenceTypeEnum'
+          writeOnly: true
+        evidence_file:
+          type: string
+          format: uri
+          writeOnly: true
+        evidence_duration_seconds:
+          type: integer
+          minimum: 0
+          writeOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedDelitCase:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        client_uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        case_number:
+          type: string
+          readOnly: true
+        delit_type:
+          type: integer
+        delit_type_detail:
+          allOf:
+          - $ref: '#/components/schemas/DelitType'
+          readOnly: true
+        source_type:
+          allOf:
+          - $ref: '#/components/schemas/SourceTypeEnum'
+          readOnly: true
+        scan:
+          type: integer
+          nullable: true
+        ticket:
+          type: integer
+          nullable: true
+        verbalization:
+          type: integer
+          nullable: true
+        alert:
+          type: integer
+          nullable: true
+        infraction:
+          type: integer
+          nullable: true
+        driver:
+          type: integer
+          nullable: true
+        vehicle:
+          type: integer
+          nullable: true
+        plate_number_snapshot:
+          type: string
+          maxLength: 20
+        facts:
+          type: string
+        detected_at:
+          type: string
+          format: date-time
+        detected_by:
+          type: integer
+          readOnly: true
+        detected_by_name:
+          type: string
+          readOnly: true
+        detected_by_badge_number:
+          type: string
+          readOnly: true
+        location_label:
+          type: string
+          maxLength: 255
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        qualification_status:
+          allOf:
+          - $ref: '#/components/schemas/QualificationStatusEnum'
+          readOnly: true
+        procedure_status:
+          allOf:
+          - $ref: '#/components/schemas/ProcedureStatusEnum'
+          readOnly: true
+        reviewed_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        reviewed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        review_note:
+          type: string
+          readOnly: true
+        referred_to:
+          type: string
+          readOnly: true
+        external_reference:
+          type: string
+          readOnly: true
+        referred_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        closed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        closed_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        closure_reason:
+          type: string
+          readOnly: true
+        cancelled_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        cancelled_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        cancellation_reason:
+          type: string
+          readOnly: true
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DelitAction'
+          readOnly: true
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/DelitEvidence'
+          readOnly: true
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/DelitHistory'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedDocumentUpdate:
+      type: object
+      properties:
+        document_type:
+          $ref: '#/components/schemas/DocumentTypeEnum'
+        title:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+    PatchedDriverUpdate:
+      type: object
+      description: |-
+        PATCH du dossier conducteur.
+
+        Les données civiles de Person ne sont pas modifiées par cet endpoint.
+      properties:
+        dossier_number:
+          type: string
+          maxLength: 50
+        address:
+          type: string
+          maxLength: 255
+        sex:
+          oneOf:
+          - $ref: '#/components/schemas/SexEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        blood_group:
+          type: string
+          maxLength: 5
+        license_type:
+          type: string
+          maxLength: 80
+        issue_place:
+          type: string
+          maxLength: 120
+        issue_date:
+          type: string
+          format: date
+          nullable: true
+        expires_at:
+          type: string
+          format: date
+          nullable: true
+    PatchedInsurancePolicyWrite:
+      type: object
+      properties:
+        vehicle:
+          type: integer
+        insurer:
+          type: string
+          maxLength: 150
+        policy_number:
+          type: string
+          maxLength: 80
+        valid_from:
+          type: string
+          format: date
+          nullable: true
+        valid_until:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/InsurancePolicyStatusEnum'
+    PatchedOwner:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        person:
+          allOf:
+          - $ref: '#/components/schemas/PersonSummary'
+          readOnly: true
+        person_id:
+          type: integer
+          writeOnly: true
+        person_data:
+          allOf:
+          - $ref: '#/components/schemas/PersonInput'
+          writeOnly: true
+        nif:
+          type: string
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        birth_date:
+          type: string
+          format: date
+          readOnly: true
+        phone:
+          type: string
+          maxLength: 30
+        address:
+          type: string
+          maxLength: 255
+        is_active:
+          type: boolean
+        current_vehicle_count:
+          type: integer
+          readOnly: true
+        created_by:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedTicket:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        client_uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        ticket_number:
+          type: string
+          readOnly: true
+        barcode_value:
+          type: string
+          readOnly: true
+        barcode_image_url:
+          type: string
+          format: uri
+          readOnly: true
+        driver:
+          type: integer
+          nullable: true
+        driver_dossier_snapshot:
+          type: string
+          maxLength: 80
+        driver_name_snapshot:
+          type: string
+          maxLength: 160
+        driver_nif_snapshot:
+          type: string
+          maxLength: 40
+        opened_by:
+          type: integer
+          readOnly: true
+        opened_by_name:
+          type: string
+          nullable: true
+          readOnly: true
+        opened_at:
+          type: string
+          format: date-time
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/TicketStatusEnum'
+          readOnly: true
+        sync_status:
+          $ref: '#/components/schemas/SyncStatusEnum'
+        pricing_status:
+          allOf:
+          - $ref: '#/components/schemas/PricingStatusEnum'
+          readOnly: true
+        pricing_authority:
+          type: string
+          readOnly: true
+        pricing_external_reference:
+          type: string
+          readOnly: true
+        pricing_requested_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        pricing_last_checked_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        pricing_message:
+          type: string
+          readOnly: true
+        note:
+          type: string
+        closed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        closed_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        closure_reason:
+          type: string
+          readOnly: true
+        cancelled_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        cancelled_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        cancellation_reason:
+          type: string
+          readOnly: true
+        verbalization_count:
+          type: integer
+          readOnly: true
+        first_verbalization:
+          allOf:
+          - $ref: '#/components/schemas/VerbalizationInput'
+          writeOnly: true
+        verbalizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketVerbalization'
+          readOnly: true
+        agent_signature_url:
+          type: string
+          format: uri
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedUserProfileUpdate:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+    PatchedVehicleWrite:
+      type: object
+      properties:
+        plate_number:
+          type: string
+          maxLength: 20
+        brand:
+          type: string
+          maxLength: 100
+        model:
+          type: string
+          maxLength: 100
+        color:
+          type: string
+          maxLength: 50
+        year:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 1900
+          format: int64
+          nullable: true
+        engine_number:
+          type: string
+          nullable: true
+          maxLength: 100
+        registration_valid_until:
+          type: string
+          format: date
+          nullable: true
+        is_wanted:
+          type: boolean
+        owner:
+          type: integer
+          nullable: true
+    PenaltyTypeEnum:
+      enum:
+      - FIXED
+      - RANGE
+      - MULTIPLE
+      - TEXT_ONLY
+      - NONE
+      type: string
+      description: |-
+        * `FIXED` - Montant fixe
+        * `RANGE` - Intervalle
+        * `MULTIPLE` - Plusieurs montants possibles
+        * `TEXT_ONLY` - Sanction textuelle
+        * `NONE` - Aucun montant renseigné
+    Person:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        nif:
+          type: string
+          nullable: true
+          maxLength: 40
+        first_name:
+          type: string
+          maxLength: 80
+        last_name:
+          type: string
+          maxLength: 80
+        birth_date:
+          type: string
+          format: date
+          nullable: true
+          description: Facultative lorsque cette information n'est pas encore disponible,
+            notamment pour un propriétaire.
+        full_name:
+          type: string
+          readOnly: true
+        driver_record:
+          allOf:
+          - $ref: '#/components/schemas/DriverRead'
+          readOnly: true
+      required:
+      - driver_record
+      - first_name
+      - full_name
+      - id
+      - last_name
+    PersonDriverRead:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        nif:
+          type: string
+          readOnly: true
+          nullable: true
+        first_name:
+          type: string
+          readOnly: true
+        last_name:
+          type: string
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        birth_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+          description: Facultative lorsque cette information n'est pas encore disponible,
+            notamment pour un propriétaire.
+      required:
+      - birth_date
+      - first_name
+      - full_name
+      - id
+      - last_name
+      - nif
+    PersonDriverWrite:
+      type: object
+      properties:
+        nif:
+          type: string
+          nullable: true
+          maxLength: 40
+        first_name:
+          type: string
+          maxLength: 80
+        last_name:
+          type: string
+          maxLength: 80
+        birth_date:
+          type: string
+          format: date
+          nullable: true
+          description: Facultative lorsque cette information n'est pas encore disponible,
+            notamment pour un propriétaire.
+      required:
+      - first_name
+      - last_name
+    PersonInput:
+      type: object
+      properties:
+        nif:
+          type: string
+          maxLength: 40
+        first_name:
+          type: string
+          maxLength: 80
+        last_name:
+          type: string
+          maxLength: 80
+        birth_date:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - first_name
+      - last_name
+      - nif
+    PersonSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        nif:
+          type: string
+          readOnly: true
+          nullable: true
+        first_name:
+          type: string
+          readOnly: true
+        last_name:
+          type: string
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        birth_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+          description: Facultative lorsque cette information n'est pas encore disponible,
+            notamment pour un propriétaire.
+      required:
+      - birth_date
+      - first_name
+      - full_name
+      - id
+      - last_name
+      - nif
+    PersonalLogin:
+      type: object
+      properties:
+        dossier_number:
+          type: string
+          maxLength: 50
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - dossier_number
+      - password
+    PlatformEnum:
+      enum:
+      - ANDROID
+      - IOS
+      - WEB
+      - OTHER
+      type: string
+      description: |-
+        * `ANDROID` - Android
+        * `IOS` - iOS
+        * `WEB` - Web
+        * `OTHER` - Autre
+    PricingStatusEnum:
+      enum:
+      - NOT_REQUESTED
+      - PENDING
+      - AVAILABLE
+      - FAILED
+      type: string
+      description: |-
+        * `NOT_REQUESTED` - Non demandé
+        * `PENDING` - Demande en cours
+        * `AVAILABLE` - Disponible
+        * `FAILED` - Échec
+    ProcedureStatusEnum:
+      enum:
+      - OPEN
+      - ACTION_TAKEN
+      - REFERRED
+      - CLOSED
+      - CANCELLED
+      type: string
+      description: |-
+        * `OPEN` - Ouvert
+        * `ACTION_TAKEN` - Mesure prise
+        * `REFERRED` - Transmis
+        * `CLOSED` - Clôturé
+        * `CANCELLED` - Annulé
+    ProfessionalLogin:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - email
+      - password
+    QualificationStatusEnum:
+      enum:
+      - POTENTIAL
+      - UNDER_REVIEW
+      - CONFIRMED
+      - REJECTED
+      type: string
+      description: |-
+        * `POTENTIAL` - Potentiel
+        * `UNDER_REVIEW` - En révision
+        * `CONFIRMED` - Confirmé
+        * `REJECTED` - Rejeté
+    Reason:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+          minLength: 5
+      required:
+      - reason
+    ResetPassword:
+      type: object
+      properties:
+        uid:
+          type: string
+        token:
+          type: string
+        new_password:
+          type: string
+          writeOnly: true
+        confirm_password:
+          type: string
+          writeOnly: true
+      required:
+      - confirm_password
+      - new_password
+      - token
+      - uid
+    RoleEnum:
+      enum:
+      - ADMIN
+      - AGENT_TERRAIN
+      - AGENT_SAISIE
+      type: string
+      description: |-
+        * `ADMIN` - Administrateur
+        * `AGENT_TERRAIN` - Agent de terrain
+        * `AGENT_SAISIE` - Agent de saisie
+    Scan:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        plate_number:
+          type: string
+          maxLength: 20
+        source:
+          type: string
+          maxLength: 30
+        agent:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - plate_number
+      - updated_at
+    ScanHistoryEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScanHistoryItem'
+        errors: {}
+      required:
+      - data
+      - errors
+      - message
+      - success
+    ScanHistoryItem:
+      type: object
+      properties:
+        id:
+          type: string
+        agent:
+          type: integer
+        plate_number:
+          type: string
+        source:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        image_url:
+          type: string
+          nullable: true
+      required:
+      - agent
+      - created_at
+      - id
+      - image_url
+      - plate_number
+      - source
+      - updated_at
+    SecureTokenRefresh:
+      type: object
+      properties:
+        refresh:
+          type: string
+        access:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - refresh
+    SeverityEnum:
+      enum:
+      - INFO
+      - WARNING
+      - CRITICAL
+      type: string
+      description: |-
+        * `INFO` - Information
+        * `WARNING` - Avertissement
+        * `CRITICAL` - Critique
+    SexEnum:
+      enum:
+      - M
+      - F
+      type: string
+      description: |-
+        * `M` - Masculin
+        * `F` - Féminin
+    SignatureEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/SignatureStatus'
+        errors: {}
+      required:
+      - data
+      - errors
+      - message
+      - success
+    SignatureStatus:
+      type: object
+      properties:
+        has_signature:
+          type: boolean
+        signature_updated_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - has_signature
+      - signature_updated_at
+    SourceEnum:
+      enum:
+      - MANUAL
+      - SYSTEM
+      type: string
+      description: |-
+        * `MANUAL` - Manuelle
+        * `SYSTEM` - Système
+    SourceTypeEnum:
+      enum:
+      - MANUAL_OBSERVATION
+      - PLATE_SCAN
+      - DRIVER_SEARCH
+      - LICENSE_SEARCH
+      - VEHICLE_CONTROL
+      - TICKET
+      - VERBALIZATION
+      - ALERT
+      type: string
+      description: |-
+        * `MANUAL_OBSERVATION` - Observation directe
+        * `PLATE_SCAN` - Scan ou recherche de plaque
+        * `DRIVER_SEARCH` - Recherche conducteur
+        * `LICENSE_SEARCH` - Recherche permis
+        * `VEHICLE_CONTROL` - Contrôle véhicule
+        * `TICKET` - Procès-verbal
+        * `VERBALIZATION` - Verbalisation
+        * `ALERT` - Alerte
+    SyncDeviceRegister:
+      type: object
+      properties:
+        device_uuid:
+          type: string
+          format: uuid
+        device_name:
+          type: string
+          default: ''
+          maxLength: 120
+        platform:
+          allOf:
+          - $ref: '#/components/schemas/PlatformEnum'
+          default: ANDROID
+        app_version:
+          type: string
+          default: ''
+          maxLength: 40
+      required:
+      - device_uuid
+    SyncDeviceRevoke:
+      type: object
+      properties:
+        device_uuid:
+          type: string
+          format: uuid
+      required:
+      - device_uuid
+    SyncEntityTypeEnum:
+      enum:
+      - TICKET
+      - VERBALIZATION
+      - TICKET_PROOF
+      - DELIT_CASE
+      - DELIT_EVIDENCE
+      type: string
+      description: |-
+        * `TICKET` - Procès-verbal
+        * `VERBALIZATION` - Verbalisation
+        * `TICKET_PROOF` - Preuve de verbalisation
+        * `DELIT_CASE` - Dossier de délit
+        * `DELIT_EVIDENCE` - Preuve de délit
+    SyncPullData:
+      type: object
+      properties:
+        request_uuid:
+          type: string
+          format: uuid
+        status:
+          type: string
+        cursor:
+          type: string
+          format: date-time
+          nullable: true
+        next_cursor:
+          type: string
+          format: date-time
+          nullable: true
+        has_more:
+          type: boolean
+        items: {}
+      required:
+      - cursor
+      - has_more
+      - items
+      - next_cursor
+      - request_uuid
+      - status
+    SyncPullEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/SyncPullData'
+        errors: {}
+      required:
+      - data
+      - errors
+      - message
+      - success
+    SyncPullRequest:
+      type: object
+      properties:
+        device_uuid:
+          type: string
+          format: uuid
+        request_uuid:
+          type: string
+          format: uuid
+        cursor:
+          type: string
+          format: date-time
+          nullable: true
+        entity_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncEntityTypeEnum'
+        limit:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 100
+      required:
+      - device_uuid
+      - request_uuid
+    SyncPushItem:
+      type: object
+      properties:
+        entity_type:
+          $ref: '#/components/schemas/SyncEntityTypeEnum'
+        operation:
+          $ref: '#/components/schemas/OperationEnum'
+        client_uuid:
+          type: string
+          format: uuid
+        base_version:
+          type: integer
+          minimum: 1
+          nullable: true
+        data: {}
+      required:
+      - client_uuid
+      - data
+      - entity_type
+      - operation
+    SyncPushRequest:
+      type: object
+      properties:
+        device_uuid:
+          type: string
+          format: uuid
+        request_uuid:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncPushItem'
+      required:
+      - device_uuid
+      - items
+      - request_uuid
+    SyncStatusEnum:
+      enum:
+      - PENDING
+      - SYNCED
+      - FAILED
+      type: string
+      description: |-
+        * `PENDING` - En attente
+        * `SYNCED` - Synchronisé
+        * `FAILED` - Échec
+    Ticket:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        client_uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        ticket_number:
+          type: string
+          readOnly: true
+        barcode_value:
+          type: string
+          readOnly: true
+        barcode_image_url:
+          type: string
+          format: uri
+          readOnly: true
+        driver:
+          type: integer
+          nullable: true
+        driver_dossier_snapshot:
+          type: string
+          maxLength: 80
+        driver_name_snapshot:
+          type: string
+          maxLength: 160
+        driver_nif_snapshot:
+          type: string
+          maxLength: 40
+        opened_by:
+          type: integer
+          readOnly: true
+        opened_by_name:
+          type: string
+          nullable: true
+          readOnly: true
+        opened_at:
+          type: string
+          format: date-time
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/TicketStatusEnum'
+          readOnly: true
+        sync_status:
+          $ref: '#/components/schemas/SyncStatusEnum'
+        pricing_status:
+          allOf:
+          - $ref: '#/components/schemas/PricingStatusEnum'
+          readOnly: true
+        pricing_authority:
+          type: string
+          readOnly: true
+        pricing_external_reference:
+          type: string
+          readOnly: true
+        pricing_requested_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        pricing_last_checked_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        pricing_message:
+          type: string
+          readOnly: true
+        note:
+          type: string
+        closed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        closed_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        closure_reason:
+          type: string
+          readOnly: true
+        cancelled_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        cancelled_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        cancellation_reason:
+          type: string
+          readOnly: true
+        verbalization_count:
+          type: integer
+          readOnly: true
+        first_verbalization:
+          allOf:
+          - $ref: '#/components/schemas/VerbalizationInput'
+          writeOnly: true
+        verbalizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketVerbalization'
+          readOnly: true
+        agent_signature_url:
+          type: string
+          format: uri
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - agent_signature_url
+      - barcode_image_url
+      - barcode_value
+      - cancellation_reason
+      - cancelled_at
+      - cancelled_by
+      - client_uuid
+      - closed_at
+      - closed_by
+      - closure_reason
+      - created_at
+      - first_verbalization
+      - id
+      - opened_at
+      - opened_by
+      - opened_by_name
+      - pricing_authority
+      - pricing_external_reference
+      - pricing_last_checked_at
+      - pricing_message
+      - pricing_requested_at
+      - pricing_status
+      - status
+      - ticket_number
+      - updated_at
+      - verbalization_count
+      - verbalizations
+    TicketInfractionRead:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        infraction_id:
+          type: integer
+          readOnly: true
+        code_snapshot:
+          type: string
+          readOnly: true
+        label_snapshot:
+          type: string
+          readOnly: true
+        article_snapshot:
+          type: string
+          readOnly: true
+        penalty_type_snapshot:
+          type: string
+          readOnly: true
+        amount_snapshot:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        minimum_amount_snapshot:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        maximum_amount_snapshot:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        amount_options_snapshot:
+          readOnly: true
+        penalty_text_snapshot:
+          type: string
+          readOnly: true
+        currency_snapshot:
+          type: string
+          readOnly: true
+      required:
+      - amount_options_snapshot
+      - amount_snapshot
+      - article_snapshot
+      - code_snapshot
+      - currency_snapshot
+      - id
+      - infraction_id
+      - label_snapshot
+      - maximum_amount_snapshot
+      - minimum_amount_snapshot
+      - penalty_text_snapshot
+      - penalty_type_snapshot
+    TicketList:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        ticket_number:
+          type: string
+          readOnly: true
+        barcode_value:
+          type: string
+          readOnly: true
+        driver:
+          type: integer
+          readOnly: true
+          nullable: true
+        driver_dossier_snapshot:
+          type: string
+          readOnly: true
+        driver_name_snapshot:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/TicketStatusEnum'
+          readOnly: true
+        sync_status:
+          allOf:
+          - $ref: '#/components/schemas/SyncStatusEnum'
+          readOnly: true
+        pricing_status:
+          allOf:
+          - $ref: '#/components/schemas/PricingStatusEnum'
+          readOnly: true
+        opened_by_name:
+          type: string
+          nullable: true
+          readOnly: true
+        opened_at:
+          type: string
+          format: date-time
+          readOnly: true
+        verbalization_count:
+          type: integer
+          readOnly: true
+      required:
+      - barcode_value
+      - driver
+      - driver_dossier_snapshot
+      - driver_name_snapshot
+      - id
+      - opened_at
+      - opened_by_name
+      - pricing_status
+      - status
+      - sync_status
+      - ticket_number
+      - verbalization_count
+    TicketProof:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        file:
+          type: string
+          format: uri
+          writeOnly: true
+        url:
+          type: string
+          format: uri
+          readOnly: true
+        evidence_type:
+          $ref: '#/components/schemas/TicketProofEvidenceTypeEnum'
+        mime_type:
+          type: string
+          readOnly: true
+        duration_seconds:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+        caption:
+          type: string
+          maxLength: 200
+        size_bytes:
+          type: integer
+          readOnly: true
+          nullable: true
+        checksum_sha256:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - checksum_sha256
+      - created_at
+      - file
+      - id
+      - mime_type
+      - size_bytes
+      - url
+    TicketProofEvidenceTypeEnum:
+      enum:
+      - PHOTO
+      - VIDEO
+      - AUDIO
+      type: string
+      description: |-
+        * `PHOTO` - Photo
+        * `VIDEO` - Vidéo
+        * `AUDIO` - Audio
+    TicketReport:
+      type: object
+      properties:
+        id:
+          type: integer
+        ticket_number:
+          type: string
+        barcode_value:
+          type: string
+        driver_id:
+          type: integer
+          nullable: true
+        driver_dossier_snapshot:
+          type: string
+        driver_name_snapshot:
+          type: string
+        driver_nif_snapshot:
+          type: string
+        status:
+          type: string
+        sync_status:
+          type: string
+        pricing_status:
+          type: string
+        opened_at:
+          type: string
+          format: date-time
+        opened_by_id:
+          type: integer
+        opened_by_name:
+          type: string
+        verbalization_count:
+          type: integer
+        first_verbalization_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_verbalization_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_plate_number:
+          type: string
+        last_location_label:
+          type: string
+      required:
+      - barcode_value
+      - driver_dossier_snapshot
+      - driver_id
+      - driver_name_snapshot
+      - driver_nif_snapshot
+      - first_verbalization_at
+      - id
+      - last_location_label
+      - last_plate_number
+      - last_verbalization_at
+      - opened_at
+      - opened_by_id
+      - opened_by_name
+      - pricing_status
+      - status
+      - sync_status
+      - ticket_number
+      - verbalization_count
+    TicketStatusEnum:
+      enum:
+      - OPEN
+      - CLOSED
+      - CANCELLED
+      type: string
+      description: |-
+        * `OPEN` - En cours
+        * `CLOSED` - Clôturé
+        * `CANCELLED` - Annulé
+    TicketVerbalization:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        client_uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        sequence_number:
+          type: integer
+          readOnly: true
+        agent:
+          type: integer
+          readOnly: true
+        agent_name:
+          type: string
+          nullable: true
+          readOnly: true
+        agent_role:
+          type: string
+          readOnly: true
+        vehicle:
+          type: integer
+          readOnly: true
+          nullable: true
+        plate_number_snapshot:
+          type: string
+          readOnly: true
+        occurred_at:
+          type: string
+          format: date-time
+          readOnly: true
+        location_label:
+          type: string
+          readOnly: true
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          readOnly: true
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          readOnly: true
+          nullable: true
+        note:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/TicketVerbalizationStatusEnum'
+          readOnly: true
+        cancelled_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        cancelled_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        cancellation_reason:
+          type: string
+          readOnly: true
+        infractions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketInfractionRead'
+          readOnly: true
+        proofs:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketProof'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - agent
+      - agent_name
+      - agent_role
+      - cancellation_reason
+      - cancelled_at
+      - cancelled_by
+      - client_uuid
+      - created_at
+      - id
+      - infractions
+      - latitude
+      - location_label
+      - longitude
+      - note
+      - occurred_at
+      - plate_number_snapshot
+      - proofs
+      - sequence_number
+      - status
+      - updated_at
+      - vehicle
+    TicketVerbalizationStatusEnum:
+      enum:
+      - ACTIVE
+      - CANCELLED
+      type: string
+      description: |-
+        * `ACTIVE` - Active
+        * `CANCELLED` - Annulée
+    UserCreate:
+      type: object
+      properties:
+        person:
+          $ref: '#/components/schemas/Person'
+        person_id:
+          type: integer
+          writeOnly: true
+        account_type:
+          $ref: '#/components/schemas/AccountTypeEnum'
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          writeOnly: true
+        agent_profile:
+          $ref: '#/components/schemas/AgentProfileWrite'
+        driver:
+          allOf:
+          - $ref: '#/components/schemas/DriverWrite'
+          writeOnly: true
+      required:
+      - account_type
+      - password
+    UserProfileUpdate:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+    UserRead:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        account_type:
+          allOf:
+          - $ref: '#/components/schemas/AccountTypeEnum'
+          default: PROFESSIONAL
+        account_type_label:
+          type: string
+          readOnly: true
+        is_active:
+          type: boolean
+          title: Actif
+          description: Précise si l’utilisateur doit être considéré comme actif. Décochez
+            ceci plutôt que de supprimer le compte.
+        person:
+          allOf:
+          - $ref: '#/components/schemas/Person'
+          readOnly: true
+        agent_profile:
+          allOf:
+          - $ref: '#/components/schemas/AgentProfileRead'
+          readOnly: true
+      required:
+      - account_type_label
+      - agent_profile
+      - id
+      - person
+    VehicleOwnership:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        vehicle:
+          type: integer
+        vehicle_display:
+          type: string
+          readOnly: true
+        owner:
+          type: integer
+        owner_name:
+          type: string
+          readOnly: true
+        owner_nif:
+          type: string
+          readOnly: true
+        ownership_type:
+          $ref: '#/components/schemas/OwnershipTypeEnum'
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        is_current:
+          type: boolean
+          readOnly: true
+        source_document_reference:
+          type: string
+          maxLength: 120
+        note:
+          type: string
+        created_by:
+          type: integer
+          readOnly: true
+        ended_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - created_by
+      - end_date
+      - ended_by
+      - id
+      - is_current
+      - owner
+      - owner_name
+      - owner_nif
+      - start_date
+      - updated_at
+      - vehicle
+      - vehicle_display
+    VehicleRead:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        plate_number:
+          type: string
+          readOnly: true
+        brand:
+          type: string
+          readOnly: true
+        model:
+          type: string
+          readOnly: true
+        color:
+          type: string
+          readOnly: true
+        year:
+          type: integer
+          readOnly: true
+          nullable: true
+        engine_number:
+          type: string
+          readOnly: true
+          nullable: true
+        registration_valid_until:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        is_wanted:
+          type: boolean
+          readOnly: true
+        owner:
+          type: integer
+          readOnly: true
+          nullable: true
+        owner_name:
+          type: string
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - brand
+      - color
+      - created_at
+      - engine_number
+      - id
+      - is_wanted
+      - model
+      - owner
+      - owner_name
+      - plate_number
+      - registration_valid_until
+      - updated_at
+      - year
+    VehicleWrite:
+      type: object
+      properties:
+        plate_number:
+          type: string
+          maxLength: 20
+        brand:
+          type: string
+          maxLength: 100
+        model:
+          type: string
+          maxLength: 100
+        color:
+          type: string
+          maxLength: 50
+        year:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 1900
+          format: int64
+          nullable: true
+        engine_number:
+          type: string
+          nullable: true
+          maxLength: 100
+        registration_valid_until:
+          type: string
+          format: date
+          nullable: true
+        is_wanted:
+          type: boolean
+        owner:
+          type: integer
+          nullable: true
+      required:
+      - plate_number
+    VerbalizationInput:
+      type: object
+      properties:
+        client_uuid:
+          type: string
+          format: uuid
+        vehicle:
+          type: integer
+          nullable: true
+        plate_number_snapshot:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+        location_label:
+          type: string
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        note:
+          type: string
+        infraction_codes:
+          type: array
+          items:
+            type: string
+      required:
+      - infraction_codes
+    VerbalizationReport:
+      type: object
+      properties:
+        id:
+          type: integer
+        ticket_id:
+          type: integer
+        ticket_number:
+          type: string
+        sequence_number:
+          type: integer
+        agent_id:
+          type: integer
+        agent_name:
+          type: string
+        agent_badge_number:
+          type: string
+        driver_dossier_snapshot:
+          type: string
+        driver_name_snapshot:
+          type: string
+        vehicle_id:
+          type: integer
+          nullable: true
+        plate_number_snapshot:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+        location_label:
+          type: string
+        status:
+          type: string
+        infraction_count:
+          type: integer
+        proof_count:
+          type: integer
+      required:
+      - agent_badge_number
+      - agent_id
+      - agent_name
+      - driver_dossier_snapshot
+      - driver_name_snapshot
+      - id
+      - infraction_count
+      - location_label
+      - occurred_at
+      - plate_number_snapshot
+      - proof_count
+      - sequence_number
+      - status
+      - ticket_id
+      - ticket_number
+      - vehicle_id
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

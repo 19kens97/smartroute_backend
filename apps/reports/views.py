@@ -1,8 +1,10 @@
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
+from drf_spectacular.utils import extend_schema
 from rest_framework.views import APIView
 
 from apps.core.api import api_response
+from apps.core.openapi import ApiEnvelopeSerializer
 
 from .pagination import ReportsPagination
 from .permissions import ReportsPermission
@@ -60,6 +62,7 @@ class BaseReportView(APIView):
 
 
 class ReportsSummaryView(BaseReportView):
+    @extend_schema(responses={200: ApiEnvelopeSerializer}, tags=["reports"])
     def get(self, request):
         try:
             data = build_summary(request.query_params)
@@ -74,6 +77,7 @@ class ReportsSummaryView(BaseReportView):
 
 
 class TicketsReportView(BaseReportView):
+    @extend_schema(responses={200: TicketReportSerializer(many=True)}, tags=["reports"])
     def get(self, request):
         return self.run_report(
             request,
@@ -84,6 +88,7 @@ class TicketsReportView(BaseReportView):
 
 
 class VerbalizationsReportView(BaseReportView):
+    @extend_schema(responses={200: VerbalizationReportSerializer(many=True)}, tags=["reports"])
     def get(self, request):
         return self.run_report(
             request,
@@ -94,6 +99,7 @@ class VerbalizationsReportView(BaseReportView):
 
 
 class InfractionsReportView(BaseReportView):
+    @extend_schema(responses={200: InfractionReportSerializer(many=True)}, tags=["reports"])
     def get(self, request):
         return self.run_report(
             request,
@@ -104,6 +110,7 @@ class InfractionsReportView(BaseReportView):
 
 
 class DelitsReportView(BaseReportView):
+    @extend_schema(responses={200: DelitReportSerializer(many=True)}, tags=["reports"])
     def get(self, request):
         return self.run_report(
             request,
@@ -114,6 +121,7 @@ class DelitsReportView(BaseReportView):
 
 
 class AgentsReportView(BaseReportView):
+    @extend_schema(responses={200: AgentReportSerializer(many=True)}, tags=["reports"])
     def get(self, request):
         return self.run_report(
             request,

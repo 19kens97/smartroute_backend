@@ -1,4 +1,5 @@
 from django.conf import settings
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.media_storage.services import (
@@ -44,6 +45,7 @@ class DocumentReadSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    @extend_schema_field(serializers.URLField())
     def get_download_url(self, obj):
         request = self.context.get("request")
         relative_url = f"/api/documents/{obj.pk}/download/"

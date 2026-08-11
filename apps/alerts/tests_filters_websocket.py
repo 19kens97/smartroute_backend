@@ -79,15 +79,15 @@ class JWTAuthMiddlewareTests(TestCase):
         self.user = create_agent(suffix="010")
         self.middleware = JWTAuthMiddleware(lambda scope, receive, send: None)
 
-    def test_extracts_token_from_query_header_and_subprotocol(self):
+    def test_extracts_token_from_header_and_subprotocol_but_not_query(self):
         token = "abc.def"
-        self.assertEqual(self.middleware._get_token({"query_string": b"token=abc.def", "headers": []}), token)
+        self.assertIsNone(self.middleware._get_token({"query_string": b"token=abc.def", "headers": []}))
         self.assertEqual(self.middleware._get_token({"headers": [(b"authorization", b"Bearer abc.def")]}), token)
         self.assertEqual(self.middleware._get_token({"headers": [(b"sec-websocket-protocol", b"json, bearer.abc.def")]}), token)
 
     async def test_authenticates_valid_jwt_and_rejects_invalid_or_missing(self):
         token = str(AccessToken.for_user(self.user))
-        user, reason = await self.middleware._authenticate({"query_string": f"token={token}".encode(), "headers": []})
+        user, reason = await self.middleware._authenticate({"query_string": b"", "headers": [(b"sec-websocket-protocol", f"bearer.{token}".encode())]})
         self.assertEqual(user.pk, self.user.pk)
         self.assertIsNone(reason)
 
@@ -95,7 +95,7 @@ class JWTAuthMiddlewareTests(TestCase):
         self.assertFalse(missing_user.is_authenticated)
         self.assertEqual(missing_reason, "missing_token")
 
-        invalid_user, invalid_reason = await self.middleware._authenticate({"query_string": b"token=not-a-token", "headers": []})
+        invalid_user, invalid_reason = await self.middleware._authenticate({"query_string": b"", "headers": [(b"sec-websocket-protocol", b"bearer.not-a-token")]})
         self.assertFalse(invalid_user.is_authenticated)
         self.assertEqual(invalid_reason, "invalid_token")
 
@@ -128,4 +128,5 @@ class AlertWebSocketTests(TransactionTestCase):
         self.assertTrue(connected)
         await communicator.send_json_to({"payload": "x" * 5000})
         await communicator.wait()
+
 

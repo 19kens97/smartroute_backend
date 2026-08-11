@@ -2,10 +2,12 @@ import mimetypes
 
 from django.http import FileResponse, Http404
 from apps.accounts.permissions import IsAgentTerrain
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from apps.core.api import api_response
+from apps.core.openapi import ApiEnvelopeSerializer, ScanHistoryEnvelopeSerializer
 from apps.gemini.views import extract_license_plate, get_last_scan, search_plate
 from .models import GeminiScan, Scan
 from .serializers import ScanSerializer
@@ -20,6 +22,7 @@ class ScanViewSet(ReadOnlyModelViewSet):
 class ScanHistoryView(APIView):
     permission_classes = [IsAgentTerrain]
 
+    @extend_schema(responses={200: ScanHistoryEnvelopeSerializer}, tags=["scans"])
     def get(self, request):
         manual_scans = [
             {
@@ -58,6 +61,7 @@ class ScanHistoryView(APIView):
 class ScanHistoryImageView(APIView):
     permission_classes = [IsAgentTerrain]
 
+    @extend_schema(parameters=[OpenApiParameter("pk", OpenApiTypes.INT, OpenApiParameter.PATH)], responses={200: OpenApiResponse(response=OpenApiTypes.BINARY, description="Image du scan")}, tags=["scans"])
     def get(self, request, pk):
         scan = GeminiScan.objects.filter(pk=pk, agent=request.user).only("image").first()
         if scan is None or not scan.image:
@@ -71,6 +75,7 @@ class ScanHistoryImageView(APIView):
 class RecognizeView(APIView):
     permission_classes = [IsAgentTerrain]
 
+    @extend_schema(request=None, responses={200: ApiEnvelopeSerializer, 501: ApiEnvelopeSerializer}, tags=["scans"])
     def post(self, request):
         from django.conf import settings
 

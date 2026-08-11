@@ -139,10 +139,10 @@ class Command(BaseCommand):
     def reset_demo_data(self):
         demo_users = get_user_model().objects.filter(email__endswith=f"@{DEMO_DOMAIN}") | get_user_model().objects.filter(person__nif__startswith=DEMO_NIF_PREFIX)
         demo_persons = Person.objects.filter(nif__startswith=DEMO_NIF_PREFIX)
-        demo_vehicles = Vehicle.objects.filter(plate_number__startswith="SR") | Vehicle.objects.filter(plate_number__in=["BB07725", "TT00030"])
+        demo_vehicles = Vehicle.objects.filter(plate_number__startswith="SR") | Vehicle.objects.filter(plate_number__in=["BB07725", "BB-07725", "TT00030", "TT-00030"])
         demo_tickets = Ticket.objects.filter(client_uuid__in=[demo_uuid(f"ticket-{i:02d}") for i in range(1, 21)])
         demo_alerts = Alert.objects.filter(deduplication_key__startswith="DEMO-DATASET:")
-        demo_scans = Scan.objects.filter(plate_number__startswith="SR") | Scan.objects.filter(plate_number__startswith="UNKNOWN") | Scan.objects.filter(plate_number__in=["BB07725", "TT00030"])
+        demo_scans = Scan.objects.filter(plate_number__startswith="SR") | Scan.objects.filter(plate_number__startswith="UNKNOWN") | Scan.objects.filter(plate_number__in=["BB07725", "BB-07725", "TT00030", "TT-00030"])
         demo_gemini = GeminiScan.objects.filter(raw_response__startswith="DEMO-DATASET:")
         if self.table_exists(DelitCase):
             demo_delits = DelitCase.objects.filter(deduplication_key__startswith="DEMO-DATASET:")
@@ -589,6 +589,7 @@ class Command(BaseCommand):
         for username in ["admin1", "admin2", "saisie1", "saisie2", "terrain1", "terrain2", "terrain3"]:
             self.stdout.write(f"- {users[username].email} / {DEMO_PASSWORD} / {users[username].agent_profile.role}")
         self.stdout.write("\nMot de passe uniquement local/dev, jamais production.")
+
 
 
 

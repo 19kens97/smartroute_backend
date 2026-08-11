@@ -2,6 +2,7 @@ from django.db import transaction
 from django.db.models import Exists, OuterRef
 from django.http import FileResponse, Http404
 from django.utils import timezone
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -304,6 +305,7 @@ class AlertViewSet(ModelViewSet):
             action_name="CANCEL",
         )
 
+    @extend_schema(parameters=[OpenApiParameter("evidence_pk", OpenApiTypes.INT, OpenApiParameter.PATH)], responses={200: OpenApiResponse(response=OpenApiTypes.BINARY, description="Fichier de preuve")})
     @action(
         detail=True,
         methods=["get"],

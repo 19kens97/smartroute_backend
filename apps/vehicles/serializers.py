@@ -1,4 +1,5 @@
 from django.db.models import Q
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.owners.services import set_current_vehicle_owner
@@ -33,6 +34,7 @@ class VehicleReadSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_owner_name(self, obj):
         owner = getattr(obj, "owner", None)
         return getattr(owner, "full_name", None) if owner else None

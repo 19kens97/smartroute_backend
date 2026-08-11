@@ -1,11 +1,13 @@
 from django.db import transaction
 from django.http import FileResponse, Http404
 from django.utils import timezone
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.decorators import action
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 from apps.core.services import log_action
+from apps.core.openapi import BinaryReferenceSerializer, DetailErrorSerializer
 from .models import DelitType, DelitCase, DelitAction, DelitEvidence
 from .pagination import DelitPagination
 from .permissions import DelitPermission
@@ -96,6 +98,7 @@ class DelitCaseViewSet(ModelViewSet):
         log_action(request.user,case,'ADD_EVIDENCE',{'evidence_id':item.pk,'evidence_type':item.evidence_type})
         return Response(DelitEvidenceSerializer(item,context={'request':request}).data,status=201)
 
+    @extend_schema(parameters=[OpenApiParameter("evidence_id", OpenApiTypes.INT, OpenApiParameter.PATH)], responses={200: OpenApiResponse(response=OpenApiTypes.BINARY, description="Fichier de preuve ou reference JSON"), 409: DetailErrorSerializer})
     @action(detail=True,methods=['get'],url_path=r'evidence/(?P<evidence_id>[^/.]+)/download')
     def evidence_download(self,request,pk=None,evidence_id=None):
         case=self.get_object(); item=case.evidence.filter(pk=evidence_id).first()

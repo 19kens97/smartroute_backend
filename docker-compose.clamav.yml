@@ -1,0 +1,28 @@
+services:
+  clamav:
+    image: clamav/clamav:stable_base
+    container_name: smartroute-clamav
+    restart: unless-stopped
+    environment:
+      CLAMAV_NO_CLAMD: "false"
+      CLAMAV_NO_FRESHCLAMD: "false"
+      FRESHCLAM_CHECKS: "24"
+    ports:
+      - "127.0.0.1:3310:3310"
+    volumes:
+      - clamav-signatures:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --stream /etc/hosts >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 3m
+    networks:
+      - smartroute-clamav
+
+volumes:
+  clamav-signatures:
+
+networks:
+  smartroute-clamav:
+    driver: bridge

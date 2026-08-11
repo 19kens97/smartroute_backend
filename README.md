@@ -283,3 +283,25 @@ Les endpoints historiques `POST /api/auth/auth/professional/login/`, `POST /api/
 - [Guide de tests](docs/testing-guide.md)
 - [Depannage](docs/troubleshooting.md)
 - [Limites connues](docs/known-limitations.md)
+
+### Recuperation de mot de passe
+
+- `POST /api/auth/forgot-password/`: demande publique de reinitialisation. Corps: `{ "email": "agent@example.com" }`. La reponse est toujours generique pour eviter l'enumeration de comptes. Un email est envoye uniquement si un compte `PROFESSIONAL` actif correspond a l'adresse.
+- `POST /api/auth/reset-password/`: confirmation de reinitialisation. Corps: `{ "uid": "...", "token": "...", "new_password": "...", "confirm_password": "..." }`. Le backend valide le token Django, applique `validate_password`, utilise `set_password` et revoque les refresh tokens existants.
+
+Configuration associee:
+
+- `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `EMAIL_USE_SSL`, `DEFAULT_FROM_EMAIL`
+- `PASSWORD_RESET_MOBILE_URL`, par defaut `smartroutemobile://reset-password`
+- `PASSWORD_RESET_TIMEOUT`, par defaut `3600` secondes
+
+En developpement, `django.core.mail.backends.console.EmailBackend` permet de lire le lien de reset dans la console sans fournisseur SMTP reel.
+## Security Operations
+
+Production must run with `DJANGO_SETTINGS_MODULE=config.settings.prod`, `DEBUG=False`, a strong external `SECRET_KEY`, explicit `ALLOWED_HOSTS`, `CORS_ALLOW_ALL_ORIGINS=False`, explicit `CORS_ALLOWED_ORIGINS`, HTTPS security settings enabled, and PostgreSQL as the default database engine. Run `python manage.py check --deploy --settings=config.settings.prod` with non-secret test values in CI before deployment.
+
+Do not transfer `.env`, `db.sqlite3`, `media/`, `private/`, `logs/`, or `backups/` by email or include them in source archives. Backups must be encrypted, access-controlled, and rotated. Private media roots should stay outside public static/media serving paths.
+
+Uploads support a configurable antivirus layer. Local development may use `ANTIVIRUS_SCANNER=disabled` with `ANTIVIRUS_REQUIRED=False`, or run ClamAV locally with `docker compose -f docker-compose.clamav.yml up -d` and `ANTIVIRUS_SCANNER=clamav_tcp`. Production must set `ANTIVIRUS_SCANNER=clamav_tcp`, `ANTIVIRUS_REQUIRED=True`, and a private clamd host; if required scanning is unavailable, uploads fail closed. See `docs/security/clamav.md`.
+
+Recommended security checks: `python manage.py check`, `python manage.py test`, `python manage.py check --deploy --settings=config.settings.prod`, and `pip-audit` when available.

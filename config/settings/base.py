@@ -1,4 +1,4 @@
-﻿from datetime import timedelta
+from datetime import timedelta
 from pathlib import Path
 from decouple import config
 
@@ -56,6 +56,12 @@ ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 AUTH_USER_MODEL = "accounts.User"
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
 
 TEMPLATES = [{
     "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -94,6 +100,17 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = [o.strip() for o in config("CORS_ALLOWED_ORIGINS", default="").split(",") if o.strip()]
 CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", cast=bool, default=False)
 
+EMAIL_BACKEND = config("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = config("EMAIL_HOST", default="")
+EMAIL_PORT = config("EMAIL_PORT", cast=int, default=587)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool, default=True)
+EMAIL_USE_SSL = config("EMAIL_USE_SSL", cast=bool, default=False)
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="SmartRoute <no-reply@smartroute.local>")
+PASSWORD_RESET_MOBILE_URL = config("PASSWORD_RESET_MOBILE_URL", default="smartroutemobile://reset-password")
+PASSWORD_RESET_TIMEOUT = config("PASSWORD_RESET_TIMEOUT", cast=int, default=3600)
+
 GEMINI_API_KEY = config("GEMINI_API_KEY", default="")
 GEMINI_MODEL = config("GEMINI_MODEL", default="gemini-2.5-flash")
 GEMINI_FALLBACK_MODELS = [m.strip() for m in config("GEMINI_FALLBACK_MODELS", default="").split(",") if m.strip()]
@@ -116,7 +133,14 @@ REST_FRAMEWORK = {
         "rest_framework.filters.OrderingFilter",
     ),
     "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.UserRateThrottle", "rest_framework.throttling.AnonRateThrottle"),
-    "DEFAULT_THROTTLE_RATES": {"user": "300/min", "anon": "50/min"},
+    "DEFAULT_THROTTLE_RATES": {
+        "user": "300/min",
+        "anon": "50/min",
+        "forgot_password": "5/hour",
+        "reset_password": "10/hour",
+        "login_ip": config("LOGIN_IP_THROTTLE_RATE", default="20/min"),
+        "login_identifier": config("LOGIN_IDENTIFIER_THROTTLE_RATE", default="8/min"),
+    },
     "EXCEPTION_HANDLER": "apps.core.api.exception_handler",
 }
 
@@ -125,6 +149,18 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Backend Django/DRF SmartRoute",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {
+        "AlertCategoryEnum": "apps.alerts.models.Alert.Category",
+        "InfractionCategoryEnum": "apps.infractions.models.Infraction.Category",
+        "AlertStatusEnum": "apps.alerts.models.Alert.Status",
+        "TicketStatusEnum": "apps.tickets.models.Ticket.Status",
+        "TicketVerbalizationStatusEnum": "apps.tickets.models.TicketVerbalization.Status",
+        "InsurancePolicyStatusEnum": "apps.insurance.models.InsurancePolicy.Status",
+        "AlertEvidenceTypeEnum": "apps.alerts.models.AlertEvidence.EvidenceType",
+        "TicketProofEvidenceTypeEnum": "apps.tickets.models.TicketProof.EvidenceType",
+        "DelitEvidenceTypeEnum": "apps.delits.models.DelitEvidence.EvidenceType",
+        "SyncEntityTypeEnum": "apps.sync.models.SyncItemLog.EntityType",
+    },
 }
 
 SIMPLE_JWT = {
@@ -180,6 +216,11 @@ MAX_AUDIO_SIZE_MB = config("MAX_AUDIO_SIZE_MB", cast=int, default=10)
 MAX_DOCUMENT_SIZE_MB = config("MAX_DOCUMENT_SIZE_MB", cast=int, default=5)
 SECURE_UPLOAD_MAX_MB = MAX_IMAGE_SIZE_MB
 ALLOWED_UPLOAD_EXTENSIONS = [".jpg", ".jpeg", ".png", ".pdf"]
+ANTIVIRUS_SCANNER = config("ANTIVIRUS_SCANNER", default="disabled")
+ANTIVIRUS_REQUIRED = config("ANTIVIRUS_REQUIRED", cast=bool, default=False)
+ANTIVIRUS_CLAMAV_HOST = config("ANTIVIRUS_CLAMAV_HOST", default="127.0.0.1")
+ANTIVIRUS_CLAMAV_PORT = config("ANTIVIRUS_CLAMAV_PORT", cast=int, default=3310)
+ANTIVIRUS_TIMEOUT_SECONDS = config("ANTIVIRUS_TIMEOUT_SECONDS", cast=float, default=5)
 ALLOWED_IMAGE_MIME_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"]
 ALLOWED_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"]
 ALERT_EVIDENCE_AUDIO_MAX_MB = MAX_AUDIO_SIZE_MB
@@ -238,3 +279,5 @@ LOGGING = {
         },
     },
 }
+
+

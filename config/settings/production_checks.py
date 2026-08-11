@@ -17,6 +17,7 @@ UNSAFE_SECRET_KEYS = {
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
 FALSE_VALUES = {"0", "false", "no", "off", ""}
+PRODUCTION_DATABASE_ENGINE = "django.db.backends.postgresql"
 
 PRODUCTION_SECURITY_SETTINGS = {
     "SECURE_SSL_REDIRECT": True,
@@ -39,7 +40,10 @@ def coerce_bool(value):
         return True
     if normalized in FALSE_VALUES:
         return False
-    return bool(value)
+    raise ImproperlyConfigured(
+        f"Invalid boolean value for production settings: {value!r}. "
+        "Use one of true/false, 1/0, yes/no, on/off."
+    )
 
 
 def normalize_hosts(value):
@@ -68,6 +72,12 @@ def validate_production_settings(
     allowed_hosts,
     cors_allow_all_origins,
     api_response_logging_include_body,
+    database_engine,
+    antivirus_scanner="disabled",
+    antivirus_required=False,
+    antivirus_clamav_host="",
+    antivirus_clamav_port=0,
+    antivirus_timeout_seconds=0,
 ):
     errors = []
 
@@ -88,6 +98,29 @@ def validate_production_settings(
 
     if coerce_bool(api_response_logging_include_body):
         errors.append("API_RESPONSE_LOGGING_INCLUDE_BODY must be False in production.")
+
+    if database_engine != PRODUCTION_DATABASE_ENGINE:
+        errors.append("DATABASES.default.ENGINE must be PostgreSQL in production.")
+
+    scanner = str(antivirus_scanner or "").strip().lower()
+    if not coerce_bool(antivirus_required):
+        errors.append("ANTIVIRUS_REQUIRED must be True in production.")
+    if scanner != "clamav_tcp":
+        errors.append("ANTIVIRUS_SCANNER must be 'clamav_tcp' in production.")
+    if not str(antivirus_clamav_host or "").strip():
+        errors.append("ANTIVIRUS_CLAMAV_HOST must point to a private clamd host in production.")
+    try:
+        port = int(antivirus_clamav_port)
+    except (TypeError, ValueError):
+        port = 0
+    if not (1 <= port <= 65535):
+        errors.append("ANTIVIRUS_CLAMAV_PORT must be a valid TCP port in production.")
+    try:
+        timeout = float(antivirus_timeout_seconds)
+    except (TypeError, ValueError):
+        timeout = 0
+    if timeout <= 0:
+        errors.append("ANTIVIRUS_TIMEOUT_SECONDS must be greater than zero in production.")
 
     if errors:
         raise ImproperlyConfigured("Invalid production settings: " + " ".join(errors))

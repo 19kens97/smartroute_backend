@@ -1,7 +1,7 @@
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
 
-from config.settings.production_checks import PRODUCTION_SECURITY_SETTINGS, coerce_bool, normalize_hosts, validate_production_settings
+from config.settings.production_checks import PRODUCTION_DATABASE_ENGINE, PRODUCTION_SECURITY_SETTINGS, coerce_bool, normalize_hosts, validate_production_settings
 
 
 class ProductionSettingsValidationTests(SimpleTestCase):
@@ -12,6 +12,12 @@ class ProductionSettingsValidationTests(SimpleTestCase):
             "allowed_hosts": ["api.smartroute.example"],
             "cors_allow_all_origins": False,
             "api_response_logging_include_body": False,
+            "database_engine": PRODUCTION_DATABASE_ENGINE,
+            "antivirus_scanner": "clamav_tcp",
+            "antivirus_required": True,
+            "antivirus_clamav_host": "clamav",
+            "antivirus_clamav_port": 3310,
+            "antivirus_timeout_seconds": 5,
         }
         values.update(overrides)
         return values
@@ -48,6 +54,10 @@ class ProductionSettingsValidationTests(SimpleTestCase):
         for value in (False, "False", "false", "0", "no", "off"):
             validate_production_settings(**self.valid_settings(debug=value))
 
+    def test_debug_absent_value_is_safe_false(self):
+        validate_production_settings(**self.valid_settings(debug=None))
+        self.assertFalse(coerce_bool(None))
+
     def test_allowed_hosts_wildcard_is_rejected(self):
         self.assert_invalid("ALLOWED_HOSTS", allowed_hosts=["*"])
         self.assert_invalid("ALLOWED_HOSTS", allowed_hosts="api.smartroute.example, *")
@@ -78,6 +88,20 @@ class ProductionSettingsValidationTests(SimpleTestCase):
         for value in (True, "True", "true", "1", "yes", "on"):
             self.assert_invalid("API_RESPONSE_LOGGING_INCLUDE_BODY", api_response_logging_include_body=value)
 
+    def test_invalid_bool_values_are_rejected(self):
+        for value in ("release", "prod", "yesplease"):
+            self.assert_invalid("Invalid boolean value", debug=value)
+
+    def test_sqlite_database_engine_is_rejected(self):
+        self.assert_invalid("DATABASES.default.ENGINE", database_engine="django.db.backends.sqlite3")
+
+
+    def test_antivirus_required_in_production(self):
+        self.assert_invalid("ANTIVIRUS_REQUIRED", antivirus_required=False)
+        self.assert_invalid("ANTIVIRUS_SCANNER", antivirus_scanner="disabled")
+        self.assert_invalid("ANTIVIRUS_CLAMAV_HOST", antivirus_clamav_host="")
+        self.assert_invalid("ANTIVIRUS_CLAMAV_PORT", antivirus_clamav_port=0)
+        self.assert_invalid("ANTIVIRUS_TIMEOUT_SECONDS", antivirus_timeout_seconds=0)
     def test_bool_coercion_is_explicit_for_common_env_values(self):
         self.assertTrue(coerce_bool("True"))
         self.assertTrue(coerce_bool("1"))
@@ -96,3 +120,5 @@ class ProductionSettingsValidationTests(SimpleTestCase):
         self.assertEqual(PRODUCTION_SECURITY_SETTINGS["SESSION_COOKIE_SECURE"], True)
         self.assertEqual(PRODUCTION_SECURITY_SETTINGS["CSRF_COOKIE_SECURE"], True)
         self.assertEqual(PRODUCTION_SECURITY_SETTINGS["X_FRAME_OPTIONS"], "DENY")
+
+

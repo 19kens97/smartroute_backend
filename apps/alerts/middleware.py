@@ -1,5 +1,3 @@
-from urllib.parse import parse_qs
-
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -49,11 +47,7 @@ class JWTAuthMiddleware:
             if item.lower().startswith("bearer."):
                 return item.split(".", 1)[1].strip()
 
-        query = parse_qs(
-            scope.get("query_string", b"").decode("utf-8", errors="ignore")
-        )
-        values = query.get("token")
-        return values[0] if values else None
+        return None
 
     @database_sync_to_async
     def _get_user(self, raw_token):
@@ -72,3 +66,5 @@ class JWTAuthMiddleware:
             raise AgentProfile.DoesNotExist
 
         return user
+
+

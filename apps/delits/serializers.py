@@ -1,10 +1,11 @@
 import hashlib
 from django.db import transaction
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from apps.media_storage.services import (
     MEDIA_TYPE_AUDIO, MEDIA_TYPE_IMAGE, MEDIA_TYPE_VIDEO,
-    get_audio_limits, get_image_limits, get_video_limits, validate_uploaded_media,
+    get_audio_limits, get_image_limits, get_video_limits, scan_file_for_virus, validate_uploaded_media,
 )
 from .models import DelitType, DelitCase, DelitAction, DelitEvidence, DelitStatusHistory
 from .services import create_potential_delit_case
@@ -32,6 +33,7 @@ class DelitEvidenceSerializer(serializers.ModelSerializer):
         read_only_fields=('url','mime_type','size_bytes','checksum_sha256','created_by','created_at')
         extra_kwargs={'file':{'write_only':True,'required':False}}
 
+    @extend_schema_field(serializers.URLField())
     def get_url(self,obj):
         request=self.context.get('request')
         path=f"/api/delits/{obj.case_id}/evidence/{obj.pk}/download/"
@@ -52,8 +54,9 @@ class DelitEvidenceSerializer(serializers.ModelSerializer):
             elif et==DelitEvidence.EvidenceType.AUDIO:
                 meta=validate_uploaded_media(file_obj,media_type=MEDIA_TYPE_AUDIO,duration_seconds=duration,field_name='file',**get_audio_limits())
             else:
+                virus_scan_status=scan_file_for_virus(file_obj)
                 content=file_obj.read(); file_obj.seek(0)
-                meta={'mime_type':getattr(file_obj,'content_type','application/octet-stream'),'size_bytes':file_obj.size,'checksum_sha256':hashlib.sha256(content).hexdigest()}
+                meta={'mime_type':getattr(file_obj,'content_type','application/octet-stream'),'size_bytes':file_obj.size,'checksum_sha256':hashlib.sha256(content).hexdigest(),'virus_scan_status':virus_scan_status}
             attrs.update(meta)
         return attrs
 
@@ -89,12 +92,14 @@ class DelitCaseSerializer(serializers.ModelSerializer):
             'cancelled_at','cancelled_by','cancellation_reason','actions','evidence','history','created_at','updated_at'
         )
 
+    @extend_schema_field(serializers.CharField())
     def get_detected_by_name(self,obj):
         person=getattr(obj.detected_by,'person',None)
         if person:
             return f"{person.first_name} {person.last_name}".strip()
         return getattr(obj.detected_by,'email','') or getattr(obj.detected_by,'username','')
 
+    @extend_schema_field(serializers.CharField())
     def get_detected_by_badge_number(self,obj):
         profile=getattr(obj.detected_by,'agent_profile',None)
         return getattr(profile,'badge_number','') or ''

@@ -1,8 +1,11 @@
-from django.test import SimpleTestCase, override_settings
+import socket
+from unittest.mock import Mock, patch
+
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import SimpleTestCase, override_settings
 from rest_framework import serializers
 
-from .services import MEDIA_TYPE_DOCUMENT, MEDIA_TYPE_IMAGE, scan_file_for_virus, validate_uploaded_media
+from .services import MEDIA_TYPE_DOCUMENT, MEDIA_TYPE_IMAGE, _scan_with_clamav_tcp, scan_file_for_virus, validate_uploaded_media
 
 
 class MediaValidationTests(SimpleTestCase):
@@ -57,5 +60,58 @@ class MediaValidationTests(SimpleTestCase):
         oversized = SimpleUploadedFile("big.jpg", b"\xff\xd8\xff" + b"x" * (1024 * 1024 + 1), content_type="image/jpeg")
         self.assert_invalid(oversized)
 
-    def test_antivirus_hook_is_explicitly_not_configured_yet(self):
+    @override_settings(ANTIVIRUS_SCANNER="disabled", ANTIVIRUS_REQUIRED=False)
+    def test_antivirus_can_be_disabled_in_development(self):
         self.assertEqual(scan_file_for_virus(None), "NOT_CONFIGURED")
+
+    @override_settings(ANTIVIRUS_SCANNER="disabled", ANTIVIRUS_REQUIRED=True)
+    def test_antivirus_required_fails_closed_when_not_configured(self):
+        with self.assertRaises(serializers.ValidationError):
+            scan_file_for_virus(None)
+
+    @override_settings(ANTIVIRUS_SCANNER="clamav_tcp", ANTIVIRUS_REQUIRED=True)
+    @patch("apps.media_storage.services._scan_with_clamav_tcp", return_value="CLEAN")
+    def test_clean_antivirus_scan_is_recorded(self, _scan):
+        jpeg = SimpleUploadedFile("ok.jpg", b"\xff\xd8\xff\xe0image", content_type="image/jpeg")
+
+        metadata = self.validate_image(jpeg)
+
+        self.assertEqual(metadata["virus_scan_status"], "CLEAN")
+
+    @override_settings(ANTIVIRUS_SCANNER="clamav_tcp", ANTIVIRUS_REQUIRED=True)
+    @patch("apps.media_storage.services._scan_with_clamav_tcp", return_value="INFECTED")
+    def test_infected_upload_is_rejected(self, _scan):
+        self.assert_invalid(SimpleUploadedFile("bad.jpg", b"\xff\xd8\xff\xe0image", content_type="image/jpeg"))
+
+    @override_settings(ANTIVIRUS_SCANNER="clamav_tcp", ANTIVIRUS_REQUIRED=True)
+    @patch("apps.media_storage.services._scan_with_clamav_tcp", return_value="UNAVAILABLE")
+    def test_required_unavailable_scanner_rejects_upload(self, _scan):
+        self.assert_invalid(SimpleUploadedFile("ok.jpg", b"\xff\xd8\xff\xe0image", content_type="image/jpeg"))
+
+    @override_settings(ANTIVIRUS_SCANNER="clamav_tcp", ANTIVIRUS_REQUIRED=False)
+    @patch("apps.media_storage.services._scan_with_clamav_tcp", return_value="UNAVAILABLE")
+    def test_optional_unavailable_scanner_allows_upload_in_development(self, _scan):
+        jpeg = SimpleUploadedFile("ok.jpg", b"\xff\xd8\xff\xe0image", content_type="image/jpeg")
+
+        metadata = self.validate_image(jpeg)
+
+        self.assertEqual(metadata["virus_scan_status"], "UNAVAILABLE")
+
+    @override_settings(ANTIVIRUS_CLAMAV_HOST="127.0.0.1", ANTIVIRUS_CLAMAV_PORT=3310, ANTIVIRUS_TIMEOUT_SECONDS=0.01)
+    @patch("apps.media_storage.services.socket.create_connection", side_effect=socket.timeout("timed out"))
+    def test_clamav_timeout_is_unavailable(self, _connect):
+        upload = SimpleUploadedFile("ok.jpg", b"\xff\xd8\xff\xe0image", content_type="image/jpeg")
+
+        self.assertEqual(_scan_with_clamav_tcp(upload), "UNAVAILABLE")
+
+    @override_settings(ANTIVIRUS_CLAMAV_HOST="127.0.0.1", ANTIVIRUS_CLAMAV_PORT=3310, ANTIVIRUS_TIMEOUT_SECONDS=1)
+    @patch("apps.media_storage.services.socket.create_connection")
+    def test_clamav_malformed_response_is_unavailable(self, connect):
+        connection = Mock()
+        connection.__enter__ = Mock(return_value=connection)
+        connection.__exit__ = Mock(return_value=False)
+        connection.recv.return_value = b"stream: ???\n"
+        connect.return_value = connection
+        upload = SimpleUploadedFile("ok.jpg", b"\xff\xd8\xff\xe0image", content_type="image/jpeg")
+
+        self.assertEqual(_scan_with_clamav_tcp(upload), "UNAVAILABLE")

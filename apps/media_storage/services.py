@@ -1,5 +1,7 @@
 import hashlib
 import logging
+import socket
+import struct
 import uuid
 from pathlib import Path
 
@@ -130,15 +132,80 @@ def validate_magic_bytes(file_obj, *, extension, mime_type, field_name="file"):
         )
 
 
-def scan_file_for_virus(_file_obj):
-    """Point d'integration futur pour antivirus externe.
+def _rewind(file_obj, position):
+    if hasattr(file_obj, "seek"):
+        file_obj.seek(position or 0)
 
-    Aucun moteur antivirus n'est branche dans le MVP afin de ne pas simuler
-    une securite inexistante. Les appels futurs pourront retourner CLEAN,
-    INFECTED ou FAILED depuis ce point unique.
-    """
-    return "NOT_CONFIGURED"
 
+def _scan_with_clamav_tcp(file_obj):
+    host = getattr(settings, "ANTIVIRUS_CLAMAV_HOST", "127.0.0.1")
+    port = int(getattr(settings, "ANTIVIRUS_CLAMAV_PORT", 3310))
+    timeout = float(getattr(settings, "ANTIVIRUS_TIMEOUT_SECONDS", 5))
+    current_position = file_obj.tell() if hasattr(file_obj, "tell") else None
+
+    try:
+        if hasattr(file_obj, "seek"):
+            file_obj.seek(0)
+        with socket.create_connection((host, port), timeout=timeout) as connection:
+            connection.settimeout(timeout)
+            connection.sendall(b"zINSTREAM\0")
+            chunks = file_obj.chunks() if hasattr(file_obj, "chunks") else iter(lambda: file_obj.read(8192), b"")
+            for chunk in chunks:
+                if not chunk:
+                    break
+                connection.sendall(struct.pack("!I", len(chunk)) + chunk)
+            connection.sendall(struct.pack("!I", 0))
+            response = connection.recv(4096).decode("utf-8", errors="replace")
+    except OSError as exc:
+        logger.warning("event=virus_scan_unavailable scanner=clamav_tcp error=%s", exc)
+        return "UNAVAILABLE"
+    finally:
+        _rewind(file_obj, current_position)
+
+    if "FOUND" in response:
+        return "INFECTED"
+    if response.strip().endswith("OK"):
+        return "CLEAN"
+    logger.warning("event=virus_scan_unexpected_response scanner=clamav_tcp response=%r", response)
+    return "UNAVAILABLE"
+
+
+def ping_clamav_tcp():
+    host = getattr(settings, "ANTIVIRUS_CLAMAV_HOST", "127.0.0.1")
+    port = int(getattr(settings, "ANTIVIRUS_CLAMAV_PORT", 3310))
+    timeout = float(getattr(settings, "ANTIVIRUS_TIMEOUT_SECONDS", 5))
+
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as connection:
+            connection.settimeout(timeout)
+            connection.sendall(b"zPING\0")
+            response = connection.recv(1024).decode("utf-8", errors="replace").strip()
+    except OSError as exc:
+        logger.warning("event=virus_scan_ping_failed scanner=clamav_tcp error=%s", exc)
+        return False
+    return response == "PONG"
+
+def scan_file_for_virus(file_obj):
+    scanner = str(getattr(settings, "ANTIVIRUS_SCANNER", "disabled") or "disabled").strip().lower()
+    required = bool(getattr(settings, "ANTIVIRUS_REQUIRED", False))
+
+    if scanner in {"", "disabled", "none"}:
+        if required:
+            raise serializers.ValidationError({"file": "Le scanner antivirus est requis mais non configure."})
+        logger.warning("event=virus_scan_skipped scanner=disabled")
+        return "NOT_CONFIGURED"
+
+    if scanner == "clamav_tcp":
+        result = _scan_with_clamav_tcp(file_obj)
+    else:
+        logger.warning("event=virus_scan_unavailable scanner=%s reason=unsupported", scanner)
+        result = "UNAVAILABLE"
+
+    if result == "INFECTED":
+        raise serializers.ValidationError({"file": "Le fichier a ete refuse par le scanner antivirus."})
+    if result != "CLEAN" and required:
+        raise serializers.ValidationError({"file": "Le scanner antivirus est indisponible."})
+    return result
 
 def compute_sha256(file_obj):
     hasher = hashlib.sha256()
@@ -201,10 +268,13 @@ def validate_uploaded_media(
         logger.warning("event=media_validation_failed reason=duration media_type=%s duration=%s max_duration=%s", media_type, duration_seconds, max_duration_seconds)
         raise serializers.ValidationError({"duration_seconds": "La duree du fichier depasse la limite autorisee."})
 
+    virus_scan_status = scan_file_for_virus(file_obj)
+
     return {
         "mime_type": mime_type,
         "size_bytes": getattr(file_obj, "size", None),
         "checksum_sha256": compute_sha256(file_obj),
+        "virus_scan_status": virus_scan_status,
     }
 
 
@@ -232,3 +302,5 @@ def get_audio_limits():
         "max_size_mb": min(getattr(settings, "MAX_AUDIO_SIZE_MB", 10), getattr(settings, "ALERT_EVIDENCE_AUDIO_MAX_MB", 10)),
         "max_duration_seconds": getattr(settings, "ALERT_EVIDENCE_AUDIO_MAX_DURATION_SECONDS", 180),
     }
+
+

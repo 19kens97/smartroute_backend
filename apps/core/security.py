@@ -6,6 +6,7 @@ from collections.abc import Mapping
 MASKED_VALUE_KEYS = {
     "address",
     "birth_date",
+    "dossier_number",
     "driver_dossier_snapshot",
     "driver_name_snapshot",
     "driver_nif_snapshot",
@@ -30,10 +31,15 @@ SENSITIVE_KEYS = {
     "authorization",
     "confirm_password",
     "cookie",
+    "document",
+    "document_file",
+    "evidence",
     "evidence_file",
     "file",
     "image",
     "new_password",
+    "proof",
+    "proof_file",
     "old_password",
     "password",
     "raw_response",
@@ -43,6 +49,7 @@ SENSITIVE_KEYS = {
     "signature",
     "signature_payload",
     "token",
+    "uid",
 }
 
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
@@ -129,3 +136,4 @@ def get_client_ip(request):
             return forwarded.split(",", 1)[0].strip()
 
     return request.META.get("REMOTE_ADDR") or None
+

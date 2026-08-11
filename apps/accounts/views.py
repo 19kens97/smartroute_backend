@@ -1,12 +1,19 @@
 import hashlib
 import json
+from urllib.parse import urlencode
 
+from django.conf import settings
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import EmailMultiAlternatives
 from django.core.files.base import ContentFile
 from django.shortcuts import get_object_or_404
+from django.template.loader import render_to_string
 from django.utils import timezone
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from PIL import Image, ImageDraw
 from drf_spectacular.utils import extend_schema
-from rest_framework import generics, status
+from rest_framework import generics, serializers, status
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -16,6 +23,8 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.core.api import error_response, success_response
+from apps.core.openapi import ApiEnvelopeSerializer, AuthEnvelopeSerializer, EmptyEnvelopeSerializer, SignatureEnvelopeSerializer
+from apps.media_storage.services import scan_file_for_virus
 
 from .models import AgentProfile, User
 from .permissions import IsAdminOrAgentSaisie
@@ -29,7 +38,16 @@ from .serializers import (
     UserProfileUpdateSerializer,
     UserReadSerializer,
 )
+from .serializers_password_reset import (
+    ForgotPasswordSerializer,
+    PASSWORD_RESET_EMAIL_NOT_FOUND_MESSAGE,
+    PASSWORD_RESET_EMAIL_SENT_MESSAGE,
+    PASSWORD_RESET_PUBLIC_MESSAGE,
+    PASSWORD_RESET_SUCCESS_MESSAGE,
+    ResetPasswordSerializer,
+)
 from .services.token import revoke_all_user_refresh_tokens
+from .throttles import ForgotPasswordThrottle, LoginIdentifierRateThrottle, LoginIpRateThrottle, ResetPasswordThrottle
 
 
 def build_auth_payload(user):
@@ -58,8 +76,36 @@ def build_auth_payload(user):
     }
 
 
+
+def build_password_reset_link(user):
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    separator = "&" if "?" in settings.PASSWORD_RESET_MOBILE_URL else "?"
+    return f"{settings.PASSWORD_RESET_MOBILE_URL}{separator}{urlencode({'uid': uid, 'token': token})}"
+
+
+def send_password_reset_email(user):
+    reset_link = build_password_reset_link(user)
+    context = {
+        "user": user,
+        "reset_link": reset_link,
+        "timeout_minutes": max(1, int(settings.PASSWORD_RESET_TIMEOUT / 60)),
+    }
+    subject = "SmartRoute - Reinitialisation du mot de passe"
+    text_body = render_to_string("accounts/password_reset_email.txt", context)
+    html_body = render_to_string("accounts/password_reset_email.html", context)
+    message = EmailMultiAlternatives(
+        subject=subject,
+        body=text_body,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[user.email],
+    )
+    message.attach_alternative(html_body, "text/html")
+    message.send(fail_silently=False)
+
 class BaseLoginAPIView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [LoginIpRateThrottle, LoginIdentifierRateThrottle]
     serializer_class = None
 
     def post(self, request):
@@ -75,12 +121,12 @@ class BaseLoginAPIView(APIView):
         )
 
 
-@extend_schema(tags=["Authentication"], request=ProfessionalLoginSerializer)
+@extend_schema(tags=["Authentication"], request=ProfessionalLoginSerializer, responses={200: AuthEnvelopeSerializer})
 class ProfessionalLoginAPIView(BaseLoginAPIView):
     serializer_class = ProfessionalLoginSerializer
 
 
-@extend_schema(tags=["Authentication"], request=PersonalLoginSerializer)
+@extend_schema(tags=["Authentication"], request=PersonalLoginSerializer, responses={200: AuthEnvelopeSerializer})
 class PersonalLoginAPIView(BaseLoginAPIView):
     serializer_class = PersonalLoginSerializer
 
@@ -106,9 +152,10 @@ def mobile_access_error(user):
     return None
 
 
-@extend_schema(tags=["Authentication"], request=MobileLoginSerializer)
+@extend_schema(tags=["Authentication"], request=MobileLoginSerializer, responses={200: AuthEnvelopeSerializer})
 class MobileLoginAPIView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [LoginIpRateThrottle, LoginIdentifierRateThrottle]
 
     def post(self, request):
         serializer = MobileLoginSerializer(data=request.data)
@@ -218,6 +265,45 @@ class CustomTokenView(APIView):
         )
 
 
+
+@extend_schema(tags=["Authentication"], request=ForgotPasswordSerializer, responses={200: EmptyEnvelopeSerializer})
+class ForgotPasswordView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ForgotPasswordThrottle]
+
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.get_eligible_user()
+        if user is not None:
+            send_password_reset_email(user)
+            return success_response(
+                message=PASSWORD_RESET_EMAIL_SENT_MESSAGE,
+                data={"email_found": True},
+            )
+        return success_response(
+            message=PASSWORD_RESET_EMAIL_NOT_FOUND_MESSAGE,
+            data={"email_found": False},
+        )
+
+
+@extend_schema(tags=["Authentication"], request=ResetPasswordSerializer, responses={200: ApiEnvelopeSerializer})
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ResetPasswordThrottle]
+
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data["user"]
+        user.set_password(serializer.validated_data["new_password"])
+        user.save(update_fields=["password"])
+        revoked_tokens = revoke_all_user_refresh_tokens(user)
+        return success_response(
+            message=PASSWORD_RESET_SUCCESS_MESSAGE,
+            data={"revoked_refresh_tokens": revoked_tokens},
+        )
+
 class UserListView(generics.ListAPIView):
     serializer_class = UserReadSerializer
     permission_classes = [IsAuthenticated, IsAdminOrAgentSaisie]
@@ -250,7 +336,7 @@ class UserCreateAPIView(generics.CreateAPIView):
 class UserDeactivateAPIView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrAgentSaisie]
 
-    @extend_schema(responses={200: dict}, tags=["Users"])
+    @extend_schema(request=None, responses={200: ApiEnvelopeSerializer}, tags=["Users"])
     def patch(self, request, pk):
         target = get_object_or_404(
             User.objects.select_related("person", "agent_profile"),
@@ -344,6 +430,7 @@ class UserProfileUpdateView(APIView):
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(request=ChangePasswordSerializer, responses={200: EmptyEnvelopeSerializer}, tags=["auth"])
     def post(self, request):
         serializer = ChangePasswordSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
@@ -370,12 +457,14 @@ class AgentSignatureView(APIView):
             "signature_updated_at": profile.signature_updated_at.isoformat() if profile and profile.signature_updated_at else None,
         }
 
+    @extend_schema(responses={200: SignatureEnvelopeSerializer}, tags=["auth"])
     def get(self, request):
         profile = self._profile(request)
         if profile is None:
             return error_response("Profil agent requis.", {"profile": "AGENT_PROFILE_REQUIRED"}, status.HTTP_403_FORBIDDEN)
         return success_response("Statut signature", self._payload(profile))
 
+    @extend_schema(request=ApiEnvelopeSerializer, responses={200: SignatureEnvelopeSerializer}, tags=["auth"])
     def put(self, request):
         profile = self._profile(request)
         if profile is None:
@@ -396,6 +485,7 @@ class AgentSignatureView(APIView):
         profile.save(update_fields=["signature_file", "signature_sha256", "signature_updated_at", "updated_at"])
         return success_response("Signature enregistree", self._payload(profile))
 
+    @extend_schema(responses={200: SignatureEnvelopeSerializer}, tags=["auth"])
     def delete(self, request):
         profile = self._profile(request)
         if profile is None:
@@ -420,6 +510,10 @@ class AgentSignatureView(APIView):
             return error_response("Image invalide.", {"signature": "INVALID_IMAGE"}, status.HTTP_400_BAD_REQUEST)
         if not image.getbbox():
             return error_response("Signature vide.", {"signature": "EMPTY_SIGNATURE"}, status.HTTP_400_BAD_REQUEST)
+        try:
+            scan_file_for_virus(uploaded)
+        except serializers.ValidationError:
+            return error_response("Le fichier ne peut pas etre verifie actuellement.", {"signature": "SECURITY_SCAN_FAILED"}, status.HTTP_400_BAD_REQUEST)
         from io import BytesIO
         buffer = BytesIO()
         image.save(buffer, format="PNG")
@@ -444,4 +538,10 @@ class AgentSignatureView(APIView):
         from io import BytesIO
         buffer = BytesIO()
         image.save(buffer, format="PNG")
-        return buffer.getvalue()
+        content = buffer.getvalue()
+        try:
+            scan_file_for_virus(ContentFile(content, name="signature.png"))
+        except serializers.ValidationError:
+            return error_response("Le fichier ne peut pas etre verifie actuellement.", {"signature": "SECURITY_SCAN_FAILED"}, status.HTTP_400_BAD_REQUEST)
+        return content
+

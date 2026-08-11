@@ -6,6 +6,8 @@ import tempfile
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from PIL import Image, ImageDraw
+from unittest.mock import patch
+from django.test import override_settings
 from rest_framework.test import APIClient, APITestCase
 
 from apps.accounts.test_factories import create_agent_terrain_user
@@ -98,6 +100,22 @@ class ProfileSignatureTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["errors"]["signature"], "FILE_TOO_LARGE")
 
+    @override_settings(ANTIVIRUS_SCANNER="clamav_tcp", ANTIVIRUS_REQUIRED=True)
+    @patch("apps.accounts.views.scan_file_for_virus")
+    def test_infected_signature_file_is_rejected(self, scan):
+        from rest_framework import serializers
+
+        scan.side_effect = serializers.ValidationError({"file": "infected"})
+        self.authenticate()
+        upload = io.BytesIO(make_png())
+        upload.name = "signature.png"
+
+        response = self.client.put(SIGNATURE_URL, {"signature": upload}, format="multipart")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["errors"]["signature"], "SECURITY_SCAN_FAILED")
+        self.user.agent_profile.refresh_from_db()
+        self.assertFalse(self.user.agent_profile.signature_file)
     def test_blank_image_is_rejected(self):
         self.authenticate()
         upload = io.BytesIO(make_png(draw_signature=False))

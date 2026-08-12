@@ -45,11 +45,12 @@ class Alert(TimeStampedModel):
         ADMINISTRATIVE = "ADMINISTRATIVE", "Administrative"
 
     class AlertType(models.TextChoices):
-        FIELD_ESCAPE = "FIELD_ESCAPE", "Fuite lors du contrôle"
-        REFUSED_CONTROL = "REFUSED_CONTROL", "Refus de contrôle"
+        FIELD_ESCAPE = "FIELD_ESCAPE", "Fuite lors du controle"
+        REFUSED_CONTROL = "REFUSED_CONTROL", "Refus de controle"
         SUSPICIOUS_BEHAVIOR = "SUSPICIOUS_BEHAVIOR", "Comportement suspect"
-        WANTED_VEHICLE = "WANTED_VEHICLE", "Véhicule volé ou recherché"
-        STOLEN_PLATE = "STOLEN_PLATE", "Plaque volée"
+        KIDNAPPING = "KIDNAPPING", "Enlevement"
+        WANTED_VEHICLE = "WANTED_VEHICLE", "Vehicule vole ou recherche"
+        STOLEN_PLATE = "STOLEN_PLATE", "Plaque volee"
         JUDICIAL = "JUDICIAL_ALERT", "Alerte judiciaire"
         DOCUMENT_EXPIRY_WARNING = (
             "DOCUMENT_EXPIRY_WARNING",
@@ -58,13 +59,13 @@ class Alert(TimeStampedModel):
 
     class Source(models.TextChoices):
         MANUAL = "MANUAL", "Manuelle"
-        SYSTEM = "SYSTEM", "Système"
+        SYSTEM = "SYSTEM", "Systeme"
 
     class Status(models.TextChoices):
         ACTIVE = "ACTIVE", "Active"
-        RESOLVED = "RESOLVED", "Résolue"
-        CANCELLED = "CANCELLED", "Annulée"
-        EXPIRED = "EXPIRED", "Expirée"
+        RESOLVED = "RESOLVED", "Resolue"
+        CANCELLED = "CANCELLED", "Annulee"
+        EXPIRED = "EXPIRED", "Expiree"
 
     class Severity(models.TextChoices):
         INFO = "INFO", "Information"
@@ -201,7 +202,7 @@ class Alert(TimeStampedModel):
             raise ValidationError(
                 {
                     "control_period_end": (
-                        "La fin de la période ne peut pas précéder le début."
+                        "La fin de la pÃƒÂ©riode ne peut pas prÃƒÂ©cÃƒÂ©der le dÃƒÂ©but."
                     )
                 }
             )
@@ -209,14 +210,14 @@ class Alert(TimeStampedModel):
         if self.category == self.Category.AUTOMATIC:
             if self.source != self.Source.SYSTEM:
                 raise ValidationError(
-                    {"source": "Une alerte automatique doit provenir du système."}
+                    {"source": "Une alerte automatique doit provenir du systÃƒÂ¨me."}
                 )
             if not self.deduplication_key:
                 raise ValidationError(
                     {
                         "deduplication_key": (
-                            "Une alerte automatique doit posséder "
-                            "une clé de déduplication."
+                            "Une alerte automatique doit possÃƒÂ©der "
+                            "une clÃƒÂ© de dÃƒÂ©duplication."
                         )
                     }
                 )
@@ -277,7 +278,7 @@ class Alert(TimeStampedModel):
 class AlertEvidence(TimeStampedModel):
     class EvidenceType(models.TextChoices):
         AUDIO = "AUDIO", "Audio"
-        VIDEO = "VIDEO", "Vidéo"
+        VIDEO = "VIDEO", "Video"
 
     alert = models.ForeignKey(
         Alert,

@@ -93,7 +93,7 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
                 "alert_type": Alert.AlertType.REFUSED_CONTROL,
                 "description": (
                     "Le conducteur refuse de se soumettre "
-                    "au contrôle routier."
+                    "au contrÃ´le routier."
                 ),
             },
             format="json",
@@ -119,6 +119,23 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
             ),
         )
 
+    def test_field_agent_can_create_kidnapping_alert(self):
+        self.auth(self.field)
+
+        response = self.client.post(
+            "/api/alerts/",
+            {
+                "alert_type": Alert.AlertType.KIDNAPPING,
+                "description": "Signalement d enlevement observe pendant la patrouille.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        alert = Alert.objects.get(pk=response.data["id"])
+        self.assertEqual(alert.alert_type, Alert.AlertType.KIDNAPPING)
+        self.assertEqual(alert.category, Alert.Category.FIELD_REPORT)
+        self.assertIsNotNone(alert.expires_at)
     def test_entry_agent_creates_administrative_alert(self):
         self.auth(self.entry)
 
@@ -128,7 +145,7 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
                 "alert_type": Alert.AlertType.STOLEN_PLATE,
                 "plate_number": "HT-12345",
                 "description": (
-                    "Plaque déclarée volée selon le dossier reçu."
+                    "Plaque dÃ©clarÃ©e volÃ©e selon le dossier reÃ§u."
                 ),
             },
             format="json",
@@ -152,7 +169,7 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
             status=Alert.Status.ACTIVE,
             source=Alert.Source.MANUAL,
             plate_number="HT-99999",
-            description="Véhicule signalé recherché.",
+            description="VÃ©hicule signalÃ© recherchÃ©.",
         )
 
         self.auth(self.admin)
@@ -162,7 +179,7 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
             {
                 "alert_type": Alert.AlertType.STOLEN_PLATE,
                 "plate_number": "AA-001",
-                "description": "Tentative de création par administrateur.",
+                "description": "Tentative de crÃ©ation par administrateur.",
             },
             format="json",
         )
@@ -172,7 +189,7 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
             f"/api/alerts/{alert.pk}/",
             {
                 "description": (
-                    "Véhicule signalé recherché, information confirmée."
+                    "VÃ©hicule signalÃ© recherchÃ©, information confirmÃ©e."
                 )
             },
             format="json",
@@ -186,13 +203,13 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
             alert_type=Alert.AlertType.FIELD_ESCAPE,
             severity=Alert.Severity.CRITICAL,
             source=Alert.Source.MANUAL,
-            description="Le véhicule a quitté le contrôle sans autorisation.",
+            description="Le vÃ©hicule a quittÃ© le contrÃ´le sans autorisation.",
         )
 
         self.auth(self.entry)
         response = self.client.post(
             f"/api/alerts/{alert.pk}/cancel/",
-            {"note": "Signalement annulé après vérification."},
+            {"note": "Signalement annulÃ© aprÃ¨s vÃ©rification."},
             format="json",
         )
 
@@ -226,7 +243,7 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
         )
         cancel_response = self.client.post(
             f"/api/alerts/{alert.pk}/cancel/",
-            {"note": "Tentative de clôture."},
+            {"note": "Tentative de clÃ´ture."},
             format="json",
         )
 
@@ -248,7 +265,7 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
             alert_type=Alert.AlertType.FIELD_ESCAPE,
             severity=Alert.Severity.CRITICAL,
             source=Alert.Source.MANUAL,
-            description="Le véhicule a quitté le contrôle.",
+            description="Le vÃ©hicule a quittÃ© le contrÃ´le.",
         )
 
         self.auth(self.entry)
@@ -283,7 +300,7 @@ class FieldAlertExpiryTests(AlertTestMixin, TestCase):
             alert_type=Alert.AlertType.SUSPICIOUS_BEHAVIOR,
             severity=Alert.Severity.WARNING,
             source=Alert.Source.MANUAL,
-            description="Comportement inhabituel observé sur le terrain.",
+            description="Comportement inhabituel observÃ© sur le terrain.",
         )
 
         Alert.objects.filter(pk=alert.pk).update(

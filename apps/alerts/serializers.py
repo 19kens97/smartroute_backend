@@ -19,6 +19,7 @@ FIELD_AGENT_TYPES = {
     Alert.AlertType.FIELD_ESCAPE,
     Alert.AlertType.REFUSED_CONTROL,
     Alert.AlertType.SUSPICIOUS_BEHAVIOR,
+    Alert.AlertType.KIDNAPPING,
 }
 ADMINISTRATIVE_TYPES = {
     Alert.AlertType.WANTED_VEHICLE,
@@ -257,8 +258,8 @@ class AlertSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {
                         "alert_type": (
-                            "Ce type d'alerte ne peut être créé "
-                            "que par le système."
+                            "Ce type d'alerte ne peut Ãªtre crÃ©Ã© "
+                            "que par le systÃ¨me."
                         )
                     }
                 )
@@ -276,20 +277,20 @@ class AlertSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {
                         "alert_type": (
-                            "Ce type d'alerte n'est pas autorisé "
-                            "pour votre rôle."
+                            "Ce type d'alerte n'est pas autorisÃ© "
+                            "pour votre rÃ´le."
                         )
                     }
                 )
         else:
             if instance.category == Alert.Category.AUTOMATIC:
                 raise serializers.ValidationError(
-                    "Une alerte automatique ne peut pas être modifiée manuellement."
+                    "Une alerte automatique ne peut pas Ãªtre modifiÃ©e manuellement."
                 )
 
             if instance.is_terminal:
                 raise serializers.ValidationError(
-                    "Une alerte clôturée ne peut plus être modifiée."
+                    "Une alerte clÃ´turÃ©e ne peut plus Ãªtre modifiÃ©e."
                 )
 
             if incoming_type is not None and incoming_type != instance.alert_type:
@@ -297,7 +298,7 @@ class AlertSerializer(serializers.ModelSerializer):
                     {
                         "alert_type": (
                             "Le type d'une alerte existante "
-                            "ne peut pas être modifié."
+                            "ne peut pas Ãªtre modifiÃ©."
                         )
                     }
                 )
@@ -309,8 +310,8 @@ class AlertSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {
                         "evidence_file": (
-                            "Une preuve ne peut être ajoutée "
-                            "qu'à la création."
+                            "Une preuve ne peut Ãªtre ajoutÃ©e "
+                            "qu'Ã  la crÃ©ation."
                         )
                     }
                 )
@@ -326,7 +327,7 @@ class AlertSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {
                     "plate_number": (
-                        "Le numéro d'immatriculation est obligatoire."
+                        "Le numÃ©ro d'immatriculation est obligatoire."
                     )
                 }
             )
@@ -346,7 +347,7 @@ class AlertSerializer(serializers.ModelSerializer):
                 {
                     "description": (
                         "La description doit contenir "
-                        "au moins 10 caractères."
+                        "au moins 10 caractÃ¨res."
                     )
                 }
             )
@@ -401,6 +402,6 @@ class AlertCloseSerializer(serializers.Serializer):
         value = value.strip()
         if len(value) < 5:
             raise serializers.ValidationError(
-                "La justification doit contenir au moins 5 caractères."
+                "La justification doit contenir au moins 5 caractÃ¨res."
             )
         return value

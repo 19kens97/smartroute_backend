@@ -43,6 +43,8 @@ def build_alert_created_event(alert):
             "id": alert.pk,
             "alert_type": alert.alert_type,
             "alert_type_display": alert.get_alert_type_display(),
+            "specification": alert.specification,
+            "specification_display": alert.get_specification_display(),
             "plate_number": alert.plate_number,
             "severity": alert.severity,
             "status": alert.status,
@@ -55,6 +57,12 @@ def build_alert_created_event(alert):
 
 
 def broadcast_alert_created(alert):
+    if (
+        alert.category == alert.Category.AUTOMATIC
+        and alert.created_by_id is not None
+    ):
+        return
+
     recipient_ids = list(
         get_alert_recipient_users(
             alert,

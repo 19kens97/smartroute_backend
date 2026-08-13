@@ -11,6 +11,7 @@ class AlertPermission(BasePermission):
             "list",
             "retrieve",
             "recent_unread",
+            "options",
             "mark_opened",
             "evidence",
         }

@@ -124,10 +124,13 @@ def _upsert_system_alert(
         getattr(vehicle, "plate_number", "")
     )
 
+    if actor is not None:
+        key = f"PERSONAL:{actor.pk}:{key}"
+
     alert, created = Alert.objects.update_or_create(
         deduplication_key=key,
         defaults={
-            "created_by": None,
+            "created_by": actor,
             "category": Alert.Category.AUTOMATIC,
             "alert_type": alert_type,
             "severity": severity,
@@ -154,7 +157,7 @@ def _upsert_system_alert(
         {"reasons": reasons},
     )
 
-    if created:
+    if created and actor is None:
         transaction.on_commit(
             lambda alert_id=alert.pk: broadcast_alert_created(
                 Alert.objects.select_related(
@@ -331,10 +334,13 @@ def evaluate_judicial_alert(
         f"{start.isoformat()}:{end.isoformat()}"
     )
 
+    if actor is not None:
+        key = f"PERSONAL:{actor.pk}:{key}"
+
     alert, created = Alert.objects.update_or_create(
         deduplication_key=key,
         defaults={
-            "created_by": None,
+            "created_by": actor,
             "category": Alert.Category.AUTOMATIC,
             "alert_type": Alert.AlertType.JUDICIAL,
             "severity": Alert.Severity.CRITICAL,

@@ -90,7 +90,8 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
         response = self.client.post(
             "/api/alerts/",
             {
-                "alert_type": Alert.AlertType.REFUSED_CONTROL,
+                "alert_type": Alert.AlertType.ROAD_CONTROL,
+                "specification": "DOCUMENT_CONTROL",
                 "description": (
                     "Le conducteur refuse de se soumettre "
                     "au contrÃ´le routier."
@@ -125,7 +126,8 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
         response = self.client.post(
             "/api/alerts/",
             {
-                "alert_type": Alert.AlertType.KIDNAPPING,
+                "alert_type": Alert.AlertType.SPECIAL_EVENT,
+                "specification": "KIDNAPPING",
                 "description": "Signalement d enlevement observe pendant la patrouille.",
             },
             format="json",
@@ -133,9 +135,58 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
 
         self.assertEqual(response.status_code, 201)
         alert = Alert.objects.get(pk=response.data["id"])
-        self.assertEqual(alert.alert_type, Alert.AlertType.KIDNAPPING)
+        self.assertEqual(alert.alert_type, Alert.AlertType.SPECIAL_EVENT)
+        self.assertEqual(alert.specification, "KIDNAPPING")
         self.assertEqual(alert.category, Alert.Category.FIELD_REPORT)
         self.assertIsNotNone(alert.expires_at)
+
+    def test_legacy_kidnapping_payload_is_mapped_to_special_event(self):
+        self.auth(self.field)
+
+        response = self.client.post(
+            "/api/alerts/",
+            {
+                "alert_type": "KIDNAPPING",
+                "description": "Signalement d enlevement observe pendant la patrouille.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        alert = Alert.objects.get(pk=response.data["id"])
+        self.assertEqual(alert.alert_type, Alert.AlertType.SPECIAL_EVENT)
+        self.assertEqual(alert.specification, "KIDNAPPING")
+
+    def test_alert_options_exposes_taxonomy(self):
+        self.auth(self.field)
+
+        response = self.client.get("/api/alerts/options/")
+
+        self.assertEqual(response.status_code, 200)
+        types = response.data["data"]["types"]
+        self.assertEqual(len(types), 8)
+        special_event = next(item for item in types if item["value"] == "SPECIAL_EVENT")
+        self.assertIn(
+            {"value": "KIDNAPPING", "label": "Enlevement"},
+            special_event["specifications"],
+        )
+
+    def test_invalid_specification_for_type_is_rejected(self):
+        self.auth(self.field)
+
+        response = self.client.post(
+            "/api/alerts/",
+            {
+                "alert_type": Alert.AlertType.TRAFFIC_ACCIDENT,
+                "specification": "KIDNAPPING",
+                "description": "Signalement suffisamment detaille pour etre valide.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("specification", response.data["errors"])
+
     def test_entry_agent_creates_administrative_alert(self):
         self.auth(self.entry)
 
@@ -200,7 +251,8 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
         alert = Alert.objects.create(
             created_by=self.field,
             category=Alert.Category.FIELD_REPORT,
-            alert_type=Alert.AlertType.FIELD_ESCAPE,
+            alert_type=Alert.AlertType.ROAD_CONTROL,
+            specification="ACTIVE_CHECKPOINT",
             severity=Alert.Severity.CRITICAL,
             source=Alert.Source.MANUAL,
             description="Le vÃ©hicule a quittÃ© le contrÃ´le sans autorisation.",
@@ -250,6 +302,42 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
         self.assertEqual(patch_response.status_code, 400)
         self.assertEqual(cancel_response.status_code, 400)
 
+
+    def test_personal_automatic_alerts_are_visible_only_to_creator(self):
+        private_alert = Alert.objects.create(
+            created_by=self.field,
+            category=Alert.Category.AUTOMATIC,
+            alert_type=Alert.AlertType.JUDICIAL,
+            severity=Alert.Severity.CRITICAL,
+            status=Alert.Status.ACTIVE,
+            source=Alert.Source.SYSTEM,
+            description="Alerte personnelle issue d'un scan.",
+            deduplication_key="PERSONAL:FIELD:JUDICIAL",
+        )
+        public_alert = Alert.objects.create(
+            category=Alert.Category.AUTOMATIC,
+            alert_type=Alert.AlertType.DOCUMENT_EXPIRY_WARNING,
+            severity=Alert.Severity.WARNING,
+            status=Alert.Status.ACTIVE,
+            source=Alert.Source.SYSTEM,
+            description="Alerte systeme globale.",
+            deduplication_key="GLOBAL:DOCUMENT",
+        )
+
+        self.auth(self.field)
+        field_response = self.client.get("/api/alerts/")
+        self.assertEqual(field_response.status_code, 200)
+        field_ids = {item["id"] for item in field_response.data["results"]}
+        self.assertIn(private_alert.pk, field_ids)
+        self.assertIn(public_alert.pk, field_ids)
+
+        self.auth(self.entry)
+        entry_response = self.client.get("/api/alerts/")
+        self.assertEqual(entry_response.status_code, 200)
+        entry_ids = {item["id"] for item in entry_response.data["results"]}
+        self.assertNotIn(private_alert.pk, entry_ids)
+        self.assertIn(public_alert.pk, entry_ids)
+
     def test_personal_account_cannot_read(self):
         self.auth(self.personal_user)
 
@@ -262,7 +350,8 @@ class AlertCategoryApiTests(AlertTestMixin, APITestCase):
         alert = Alert.objects.create(
             created_by=self.field,
             category=Alert.Category.FIELD_REPORT,
-            alert_type=Alert.AlertType.FIELD_ESCAPE,
+            alert_type=Alert.AlertType.ROAD_CONTROL,
+            specification="ACTIVE_CHECKPOINT",
             severity=Alert.Severity.CRITICAL,
             source=Alert.Source.MANUAL,
             description="Le vÃ©hicule a quittÃ© le contrÃ´le.",
@@ -297,7 +386,8 @@ class FieldAlertExpiryTests(AlertTestMixin, TestCase):
         alert = Alert.objects.create(
             created_by=self.field,
             category=Alert.Category.FIELD_REPORT,
-            alert_type=Alert.AlertType.SUSPICIOUS_BEHAVIOR,
+            alert_type=Alert.AlertType.DANGEROUS_CONDITION,
+            specification="IMMEDIATE_RISK_AREA",
             severity=Alert.Severity.WARNING,
             source=Alert.Source.MANUAL,
             description="Comportement inhabituel observÃ© sur le terrain.",

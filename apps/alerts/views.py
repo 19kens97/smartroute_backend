@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from django.http import FileResponse, Http404
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
@@ -23,6 +23,7 @@ from .serializers import (
     AlertSerializer,
 )
 from .services import expire_field_alerts
+from .taxonomy import alert_options_payload
 
 
 class AlertViewSet(ModelViewSet):
@@ -65,6 +66,15 @@ class AlertViewSet(ModelViewSet):
 
         queryset = queryset.order_by("-created_at", "-id")
 
+        if self.request.user.is_authenticated:
+            queryset = queryset.filter(
+                Q(category=Alert.Category.AUTOMATIC, created_by__isnull=True)
+                | Q(category=Alert.Category.AUTOMATIC, created_by=self.request.user)
+                | ~Q(category=Alert.Category.AUTOMATIC)
+            )
+
+        # private automatic alerts stay visible only to the agent who triggered them
+
         if (
             self.action == "list"
             and self.request.query_params.get(
@@ -104,7 +114,11 @@ class AlertViewSet(ModelViewSet):
                     severity = (
                         Alert.Severity.WARNING
                         if alert_type
-                        == Alert.AlertType.SUSPICIOUS_BEHAVIOR
+                        in {
+                            Alert.AlertType.TRAFFIC,
+                            Alert.AlertType.ROAD_CONDITION,
+                            Alert.AlertType.DANGEROUS_CONDITION,
+                        }
                         else Alert.Severity.CRITICAL
                     )
                 else:
@@ -159,6 +173,19 @@ class AlertViewSet(ModelViewSet):
             self.request.user,
             alert,
             "UPDATE",
+        )
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="options",
+    )
+    def options(self, request):
+        return api_response(
+            True,
+            "Options d'alertes recuperees.",
+            alert_options_payload(),
+            status_code=status.HTTP_200_OK,
         )
 
     @action(

@@ -15,6 +15,9 @@ class AlertFilter(django_filters.FilterSet):
     alert_type = django_filters.MultipleChoiceFilter(
         choices=Alert.AlertType.choices
     )
+    specification = django_filters.MultipleChoiceFilter(
+        choices=Alert._meta.get_field("specification").choices
+    )
     source = django_filters.MultipleChoiceFilter(
         choices=Alert.Source.choices
     )
@@ -48,6 +51,7 @@ class AlertFilter(django_filters.FilterSet):
         fields = (
             "category",
             "alert_type",
+            "specification",
             "created_by",
             "source",
             "severity",
@@ -83,6 +87,7 @@ class AlertFilter(django_filters.FilterSet):
         query = (
             Q(description__icontains=term)
             | Q(alert_type__icontains=term)
+            | Q(specification__icontains=term)
             | Q(subject_nif__icontains=term)
             | Q(resolution_note__icontains=term)
         )

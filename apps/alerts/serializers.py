@@ -13,13 +13,18 @@ from apps.media_storage.services import (
 from apps.vehicles.models import normalize_plate_number
 
 from .models import Alert, AlertEvidence
+from .taxonomy import alert_options_payload, is_alert_taxonomy_type, is_valid_specification
 
 
 FIELD_AGENT_TYPES = {
-    Alert.AlertType.FIELD_ESCAPE,
-    Alert.AlertType.REFUSED_CONTROL,
-    Alert.AlertType.SUSPICIOUS_BEHAVIOR,
-    Alert.AlertType.KIDNAPPING,
+    Alert.AlertType.TRAFFIC_ACCIDENT,
+    Alert.AlertType.TRAFFIC,
+    Alert.AlertType.ROAD_OBSTACLE,
+    Alert.AlertType.ROAD_CONDITION,
+    Alert.AlertType.DANGEROUS_CONDITION,
+    Alert.AlertType.ROAD_CONTROL,
+    Alert.AlertType.REINFORCEMENT,
+    Alert.AlertType.SPECIAL_EVENT,
 }
 ADMINISTRATIVE_TYPES = {
     Alert.AlertType.WANTED_VEHICLE,
@@ -74,6 +79,10 @@ class AlertListSerializer(serializers.ModelSerializer):
         source="get_alert_type_display",
         read_only=True,
     )
+    specification_display = serializers.CharField(
+        source="get_specification_display",
+        read_only=True,
+    )
     category_display = serializers.CharField(
         source="get_category_display",
         read_only=True,
@@ -88,6 +97,8 @@ class AlertListSerializer(serializers.ModelSerializer):
             "category_display",
             "alert_type",
             "alert_type_display",
+            "specification",
+            "specification_display",
             "severity",
             "status",
             "plate_number",
@@ -105,8 +116,16 @@ class AlertListSerializer(serializers.ModelSerializer):
 
 
 class AlertSerializer(serializers.ModelSerializer):
+    alert_type = serializers.ChoiceField(
+        choices=list(Alert.AlertType.choices) + [("KIDNAPPING", "Enlevement")],
+        required=False,
+    )
     alert_type_display = serializers.CharField(
         source="get_alert_type_display",
+        read_only=True,
+    )
+    specification_display = serializers.CharField(
+        source="get_specification_display",
         read_only=True,
     )
     category_display = serializers.CharField(
@@ -144,6 +163,8 @@ class AlertSerializer(serializers.ModelSerializer):
             "category_display",
             "alert_type",
             "alert_type_display",
+            "specification",
+            "specification_display",
             "severity",
             "status",
             "status_display",
@@ -252,6 +273,28 @@ class AlertSerializer(serializers.ModelSerializer):
         instance = self.instance
         incoming_type = attrs.get("alert_type")
         alert_type = incoming_type or getattr(instance, "alert_type", None)
+        incoming_specification = attrs.get("specification")
+        specification = incoming_specification if incoming_specification is not None else getattr(instance, "specification", "")
+
+        if incoming_type == "KIDNAPPING":
+            alert_type = Alert.AlertType.SPECIAL_EVENT
+            specification = "KIDNAPPING"
+            attrs["alert_type"] = alert_type
+            attrs["specification"] = specification
+
+        if is_alert_taxonomy_type(alert_type):
+            if not specification:
+                raise serializers.ValidationError(
+                    {"specification": "La specification est obligatoire pour ce type d'alerte."}
+                )
+            if not is_valid_specification(alert_type, specification):
+                raise serializers.ValidationError(
+                    {"specification": "La specification selectionnee ne correspond pas au type d'alerte."}
+                )
+        elif specification:
+            raise serializers.ValidationError(
+                {"specification": "Ce type d'alerte ne supporte pas de specification."}
+            )
 
         if instance is None:
             if alert_type in SYSTEM_ONLY_TYPES:
@@ -354,6 +397,9 @@ class AlertSerializer(serializers.ModelSerializer):
 
         if "description" in attrs or instance is None:
             attrs["description"] = description
+
+        if is_alert_taxonomy_type(alert_type):
+            attrs["specification"] = specification
 
         self._validate_evidence(attrs)
         return attrs

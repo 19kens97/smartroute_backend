@@ -28,7 +28,8 @@ class AlertRealtimeAdditionalTests(TestCase):
         self.alert = Alert.objects.create(
             created_by=self.creator,
             category=Alert.Category.FIELD_REPORT,
-            alert_type=Alert.AlertType.FIELD_ESCAPE,
+            alert_type=Alert.AlertType.ROAD_CONTROL,
+            specification="ACTIVE_CHECKPOINT",
             severity=Alert.Severity.CRITICAL,
             status=Alert.Status.ACTIVE,
             source=Alert.Source.MANUAL,
@@ -79,6 +80,25 @@ class AlertRealtimeAdditionalTests(TestCase):
         broadcast_alert_created(self.alert)
         async_to_sync.assert_not_called()
 
+    @patch("apps.alerts.realtime.async_to_sync")
+    @patch("apps.alerts.realtime.get_channel_layer")
+    def test_personal_automatic_alert_is_not_broadcast(self, get_layer, async_to_sync):
+        personal_alert = Alert.objects.create(
+            created_by=self.creator,
+            category=Alert.Category.AUTOMATIC,
+            alert_type=Alert.AlertType.JUDICIAL,
+            severity=Alert.Severity.CRITICAL,
+            status=Alert.Status.ACTIVE,
+            source=Alert.Source.SYSTEM,
+            description="Alerte issue d'une recherche personnelle.",
+            deduplication_key="PERSONAL:TEST:ALERT",
+        )
+
+        broadcast_alert_created(personal_alert)
+
+        get_layer.assert_not_called()
+        async_to_sync.assert_not_called()
+
 
 class ExpireFieldAlertsCommandTests(TestCase):
     def test_command_outputs_expired_count(self):
@@ -86,7 +106,8 @@ class ExpireFieldAlertsCommandTests(TestCase):
         expired = Alert.objects.create(
             created_by=user,
             category=Alert.Category.FIELD_REPORT,
-            alert_type=Alert.AlertType.SUSPICIOUS_BEHAVIOR,
+            alert_type=Alert.AlertType.DANGEROUS_CONDITION,
+            specification="IMMEDIATE_RISK_AREA",
             severity=Alert.Severity.WARNING,
             source=Alert.Source.MANUAL,
             description="Alerte expiree.",
@@ -95,7 +116,8 @@ class ExpireFieldAlertsCommandTests(TestCase):
         Alert.objects.create(
             created_by=user,
             category=Alert.Category.FIELD_REPORT,
-            alert_type=Alert.AlertType.SUSPICIOUS_BEHAVIOR,
+            alert_type=Alert.AlertType.DANGEROUS_CONDITION,
+            specification="IMMEDIATE_RISK_AREA",
             severity=Alert.Severity.WARNING,
             source=Alert.Source.MANUAL,
             description="Alerte encore valide.",

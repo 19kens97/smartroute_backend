@@ -12,6 +12,13 @@ from apps.core.models import TimeStampedModel
 from apps.media_storage.services import alert_evidence_upload_path
 from apps.vehicles.models import Vehicle, normalize_plate_number
 
+from .taxonomy import (
+    alert_specification_choices,
+    get_alert_specification_label,
+    is_alert_taxonomy_type,
+    is_valid_specification,
+)
+
 
 FIELD_ALERT_LIFETIME_HOURS = 6
 
@@ -45,10 +52,14 @@ class Alert(TimeStampedModel):
         ADMINISTRATIVE = "ADMINISTRATIVE", "Administrative"
 
     class AlertType(models.TextChoices):
-        FIELD_ESCAPE = "FIELD_ESCAPE", "Fuite lors du controle"
-        REFUSED_CONTROL = "REFUSED_CONTROL", "Refus de controle"
-        SUSPICIOUS_BEHAVIOR = "SUSPICIOUS_BEHAVIOR", "Comportement suspect"
-        KIDNAPPING = "KIDNAPPING", "Enlevement"
+        TRAFFIC_ACCIDENT = "TRAFFIC_ACCIDENT", "Accident de circulation"
+        TRAFFIC = "TRAFFIC", "Route / circulation"
+        ROAD_OBSTACLE = "ROAD_OBSTACLE", "Obstacle sur la chaussee"
+        ROAD_CONDITION = "ROAD_CONDITION", "Etat de la route"
+        DANGEROUS_CONDITION = "DANGEROUS_CONDITION", "Conditions dangereuses"
+        ROAD_CONTROL = "ROAD_CONTROL", "Controle routier / operation"
+        REINFORCEMENT = "REINFORCEMENT", "Situation necessitant du renfort"
+        SPECIAL_EVENT = "SPECIAL_EVENT", "Evenement particulier"
         WANTED_VEHICLE = "WANTED_VEHICLE", "Vehicule vole ou recherche"
         STOLEN_PLATE = "STOLEN_PLATE", "Plaque volee"
         JUDICIAL = "JUDICIAL_ALERT", "Alerte judiciaire"
@@ -87,6 +98,13 @@ class Alert(TimeStampedModel):
     alert_type = models.CharField(
         max_length=40,
         choices=AlertType.choices,
+        db_index=True,
+    )
+    specification = models.CharField(
+        max_length=60,
+        choices=alert_specification_choices,
+        blank=True,
+        default="",
         db_index=True,
     )
     severity = models.CharField(
@@ -260,6 +278,32 @@ class Alert(TimeStampedModel):
                 }
             )
 
+        if is_alert_taxonomy_type(self.alert_type):
+            if not self.specification:
+                raise ValidationError(
+                    {
+                        "specification": (
+                            "La specification est obligatoire pour ce type d'alerte."
+                        )
+                    }
+                )
+            if not is_valid_specification(self.alert_type, self.specification):
+                raise ValidationError(
+                    {
+                        "specification": (
+                            "La specification selectionnee ne correspond pas au type d'alerte."
+                        )
+                    }
+                )
+        elif self.specification:
+            raise ValidationError(
+                {
+                    "specification": (
+                        "Ce type d'alerte ne supporte pas de specification."
+                    )
+                }
+            )
+
         if self.status == self.Status.ACTIVE:
             self.resolved_at = None
             self.resolved_by = None
@@ -270,6 +314,9 @@ class Alert(TimeStampedModel):
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
+
+    def get_specification_display(self):
+        return get_alert_specification_label(self.specification)
 
     def __str__(self):
         return f"{self.get_alert_type_display()} #{self.pk or 'nouvelle'}"

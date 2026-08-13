@@ -47,7 +47,8 @@ class AlertFilterTests(TestCase):
         )
         self.person = Alert.objects.create(
             category=Alert.Category.ADMINISTRATIVE,
-            alert_type=Alert.AlertType.REFUSED_CONTROL,
+            alert_type=Alert.AlertType.ROAD_CONTROL,
+            specification="DOCUMENT_CONTROL",
             severity=Alert.Severity.WARNING,
             status=Alert.Status.RESOLVED,
             source=Alert.Source.MANUAL,
@@ -64,7 +65,7 @@ class AlertFilterTests(TestCase):
         self.assertEqual(self._ids({"status": [Alert.Status.RESOLVED]}), [self.person.id])
         self.assertEqual(self._ids({"plate_number": "aa12345"}), [self.vehicle.id])
         self.assertEqual(self._ids({"search": "recherche"}), [self.vehicle.id])
-        self.assertEqual(self._ids({"search": "REFUSED"}), [self.person.id])
+        self.assertEqual(self._ids({"search": "DOCUMENT"}), [self.person.id])
 
     def test_combined_filters_and_invalid_plate_return_exact_queryset(self):
         self.assertEqual(
